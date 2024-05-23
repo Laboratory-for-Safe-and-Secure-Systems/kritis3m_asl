@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
+project(kritis3m_asl)
+
 # Make sure VSCode and IntelliSense finds its necessary data
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
