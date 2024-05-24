@@ -1,0 +1,4 @@
+name: kritis3m_asl
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig

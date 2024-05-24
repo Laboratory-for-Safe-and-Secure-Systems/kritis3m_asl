@@ -6,7 +6,7 @@ project(kritis3m_asl)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
-option(ENABLE_PKCS11 "Enable PKCS11 support" ON)
+option(KRITIS3M_ASL_ENABLE_PKCS11 "Enable PKCS11 support" ON)
 
 
 include(FetchContent)
@@ -91,7 +91,7 @@ target_link_libraries(asl PRIVATE wolfssl)
 
 
 # Add PKCS11 related stuff
-if(ENABLE_PKCS11)
+if(KRITIS3M_ASL_ENABLE_PKCS11)
         target_sources(asl PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/wolfssl_pkcs11_pqc.c
         )

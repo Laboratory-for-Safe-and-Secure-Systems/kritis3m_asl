@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: MIT
+
+config KRITIS3M_ASL
+	bool "Enable KRITIS3M Abstract Security Library"
+	depends on WOLFSSL
+	help
+	  This option enables the KRITIS3M Abstract Security Library as a Zephyr module.
+
+menu "KRITIS3M ASL configuration"
+
+config KRITIS3M_ASL_PKCS11
+	bool "Enable PKCS#11 support"
+	depends on KRITIS3M_ASL
+	help
+	  This option enables PKCS#11 support in the KRITIS3M Abstract Security Library.
+
+endmenu
