@@ -14,14 +14,14 @@ Set(FETCHCONTENT_QUIET FALSE)
 
 # External repositories we need
 FetchContent_Declare(liboqs
-    GIT_REPOSITORY          https://github.com/Frauschi/liboqs.git
+    GIT_REPOSITORY          https://github.com/open-quantum-safe/liboqs.git
     GIT_TAG                 origin/main
     GIT_PROGRESS            TRUE
     USES_TERMINAL_DOWNLOAD  TRUE
 )
 
 FetchContent_Declare(wolfssl
-    GIT_REPOSITORY          https://github.com/Frauschi/wolfssl.git
+    GIT_REPOSITORY          git@github.com:Laboratory-for-Safe-and-Secure-Systems/wolfssl.git
     GIT_TAG                 origin/development
     GIT_PROGRESS            TRUE
     USES_TERMINAL_DOWNLOAD  TRUE
