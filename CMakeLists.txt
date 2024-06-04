@@ -134,6 +134,6 @@ if(KRITIS3M_ASL_INTERNAL_API)
         # Install the internal WolfSSL header files
         install(DIRECTORY ${wolfssl_SOURCE_DIR}/wolfssl/ DESTINATION include/kritis3m_asl/wolfssl)
         install(DIRECTORY ${wolfssl_BINARY_DIR}/wolfssl/ DESTINATION include/kritis3m_asl/wolfssl)
-        install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/priv_include/wolfssl/ DESTINATION include/kritis3m_asl/wolfssl)
+        install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/priv_include/wolfssl/ DESTINATION include/kritis3m_asl)
         install(DIRECTORY ${OQS_BINARY_DIR}/../include/ DESTINATION include/kritis3m_asl)
 endif()
