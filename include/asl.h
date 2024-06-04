@@ -241,7 +241,7 @@ char const* asl_error_message(int error_code);
 #include "wolfssl/ssl.h"
 
 /* Get the internal WolfSSL CTX object */
-WOLFSSL_CTX* asl_get_wolfssl_contex(asl_endpoint* endpoint);
+WOLFSSL_CTX* asl_get_wolfssl_context(asl_endpoint* endpoint);
 
 /* Get the internal WolfSSL session object */
 WOLFSSL* asl_get_wolfssl_session(asl_session* session);

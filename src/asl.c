@@ -5,6 +5,7 @@
 
 #include "secure_element/wolfssl_pkcs11_pqc.h"
 
+#include "asl_config.h"
 #include "asl.h"
 #include "asl_logging.h"
 
@@ -1002,7 +1003,7 @@ char const* asl_error_message(int error_code)
 #if defined(KRITIS3M_ASL_INTERNAL_API)
 
 /* Get the internal WolfSSL CTX object */
-WOLFSSL_CTX* asl_get_wolfssl_contex(asl_endpoint* endpoint)
+WOLFSSL_CTX* asl_get_wolfssl_context(asl_endpoint* endpoint)
 {
 	return endpoint->context;
 }

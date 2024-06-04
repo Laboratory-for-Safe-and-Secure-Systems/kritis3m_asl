@@ -1,0 +1,7 @@
+#ifndef ASL_CONFIG_H
+#define ASL_CONFIG_H
+
+#cmakedefine KRITIS3M_ASL_ENABLE_PKCS11
+#cmakedefine KRITIS3M_ASL_INTERNAL_API
+
+#endif // ASL_CONFIG_H
