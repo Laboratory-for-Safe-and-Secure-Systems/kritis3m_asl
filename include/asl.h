@@ -12,9 +12,27 @@ enum ASL_ERROR_CODES
         ASL_SUCCESS = 0,
         ASL_MEMORY_ERROR = -1,
         ASL_ARGUMENT_ERROR = -2,
-        ASL_WANT_READ = -3,
-        ASL_WANT_WRITE = -4,
+        ASL_INTERNAL_ERROR = -3,
+        ASL_CERTIFICATE_ERROR = -4,
+        ASL_PKCS11_ERROR = -5,
+        ASL_CONN_CLOSED = -6,
+        ASL_WANT_READ = -7,
+        ASL_WANT_WRITE = -8,
 };
+
+
+/* Available Log levels. Default is ERR. */
+enum ASL_LOG_LEVEL
+{
+    ASL_LOG_LEVEL_ERR   = 1U,
+    ASL_LOG_LEVEL_WRN   = 2U,
+    ASL_LOG_LEVEL_INF   = 3U,
+    ASL_LOG_LEVEL_DBG   = 4U,
+};
+
+
+/* Function pointer type for custom logging callbacks. */
+typedef void (*asl_custom_log_callback)(int32_t level, char const* message);
 
 
 /* Data structure for the library configuration */
@@ -22,6 +40,7 @@ typedef struct
 {
         bool loggingEnabled;
         int32_t logLevel;
+        asl_custom_log_callback customLogCallback;
 
         bool secure_element_support;
         char const* secure_element_middleware_path;
@@ -107,6 +126,33 @@ asl_handshake_metrics;
 int asl_init(asl_configuration const* config);
 
 
+/* Enable/disable logging infrastructure.
+ *
+ * Parameter is a boolean value to enable or disable logging.
+ *
+ * Returns ASL_SUCCESS on success, negative error code in case of an error.
+ */
+int asl_enable_logging(bool enable);
+
+
+/* Set a custom logging callback.
+ *
+ * Parameter is a function pointer to the custom logging callback.
+ *
+ * Returns ASL_SUCCESS on success, negative error code in case of an error.
+ */
+int asl_set_custom_log_callback(asl_custom_log_callback new_callback);
+
+
+/* Update the log level.
+ *
+ * Parameter is the new log level.
+ *
+ * Returns ASL_SUCCESS on success, negative error code in case of an error.
+ */
+int asl_set_log_level(int32_t new_log_level);
+
+
 /* Setup a TLS server endpoint.
  *
  * Parameter is a pointer to a filled endpoint_configuration structure.
@@ -185,6 +231,22 @@ void asl_free_endpoint(asl_endpoint* endpoint);
 
 /* Print human-readable error message */
 char const* asl_error_message(int error_code);
+
+
+
+/* Access to the internal WolfSSL API */
+#if defined(KRITIS3M_ASL_INTERNAL_API)
+
+#include "wolfssl/options.h"
+#include "wolfssl/ssl.h"
+
+/* Get the internal WolfSSL CTX object */
+WOLFSSL_CTX* asl_get_wolfssl_contex(asl_endpoint* endpoint);
+
+/* Get the internal WolfSSL session object */
+WOLFSSL* asl_get_wolfssl_session(asl_session* session);
+
+#endif
 
 
 #endif /* AGILE_SECURITY_LIBRARY_H */

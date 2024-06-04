@@ -7,6 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
 option(KRITIS3M_ASL_ENABLE_PKCS11 "Enable PKCS11 support" ON)
+option(KRITIS3M_ASL_INTERNAL_API "Enable access to internal WolfSSL API" OFF)
 
 
 include(FetchContent)
@@ -77,6 +78,7 @@ target_link_libraries(wolfssl PRIVATE oqs)
 # Define the main library
 add_library(asl STATIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src/asl.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/asl_logging.c
 )
 
 target_include_directories(asl PUBLIC
@@ -94,6 +96,14 @@ target_link_libraries(asl PRIVATE wolfssl)
 if(KRITIS3M_ASL_ENABLE_PKCS11)
         target_sources(asl PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/wolfssl_pkcs11_pqc.c
+        )
+endif()
+
+
+# Check if we should enable the internal WolfSSL API
+if(KRITIS3M_ASL_INTERNAL_API)
+        target_compile_definitions(asl PRIVATE
+                KRITIS3M_ASL_INTERNAL_API
         )
 endif()
 
@@ -121,3 +131,10 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${LIBNAME} TYPE LIB)
 
 # Install header files
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/ DESTINATION include/kritis3m_asl)
+
+if(KRITIS3M_ASL_INTERNAL_API)
+        # Install the internal WolfSSL header files
+        install(DIRECTORY ${wolfssl_SOURCE_DIR}/wolfssl/ DESTINATION include/kritis3m_asl/wolfssl)
+        install(DIRECTORY ${wolfssl_BINARY_DIR}/wolfssl/ DESTINATION include/kritis3m_asl/wolfssl)
+        install(DIRECTORY ${OQS_BINARY_DIR}/../include/ DESTINATION include/kritis3m_asl)
+endif()

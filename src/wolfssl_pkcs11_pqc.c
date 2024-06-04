@@ -5,10 +5,8 @@
 #include "wolfssl/wolfcrypt/asn.h"
 #include "wolfssl/wolfcrypt/wc_pkcs11.h"
 
-// #include "logging.h"
-
-// LOG_MODULE_REGISTER(wolfssl_pkcs11);
-
+#include "asl.h"
+#include "asl_logging.h"
 
 #define DEVICE_ID_SECURE_ELEMENT 1
 
@@ -89,7 +87,7 @@ int pkcs11_import_pem_key(asl_pkcs11_module* module, uint8_t const* pem_buffer, 
 	if (ret < 0)
 	{
 		FreeDer(&der);
-		// LOG_ERR("Error converting private key to DER");
+		asl_log(ASL_LOG_LEVEL_ERR, "Error converting private key to DER");
 		return -1;
 	}
 
@@ -129,7 +127,7 @@ int pkcs11_import_pem_key(asl_pkcs11_module* module, uint8_t const* pem_buffer, 
 	if (key == NULL)
 	{
 		FreeDer(&der);
-		// LOG_ERR("Error creating private key object");
+		asl_log(ASL_LOG_LEVEL_ERR, "Error creating private key object");
 		return -1;
 	}
 
@@ -137,7 +135,7 @@ int pkcs11_import_pem_key(asl_pkcs11_module* module, uint8_t const* pem_buffer, 
 	ret = wc_Pkcs11StoreKey_ex(&module->token, type, 1, key, 1);
 	if (ret != 0)
 	{
-		// LOG_ERR("Error importing private key into secure element: %d", ret);
+		asl_log(ASL_LOG_LEVEL_ERR, "Error importing private key into secure element: %d", ret);
 		ret = -1;
 	}
 
@@ -172,7 +170,7 @@ int pkcs11_import_pem_key(asl_pkcs11_module* module, uint8_t const* pem_buffer, 
 	(void)id;
 	(void)len;
 
-	// LOG_ERR("PKCS#11 support is not enabled");
+	asl_log(ASL_LOG_LEVEL_ERR, "PKCS#11 support is not enabled");
 
 	return -1;
 #endif /* HAVE_PKCS11 */
@@ -194,14 +192,14 @@ dilithium_key* create_dilithium_key_from_buffer(int key_format, uint8_t const* d
 	dilithium_key* key = (dilithium_key*) malloc(sizeof(dilithium_key));
 	if (key == NULL)
 	{
-		// LOG_ERR("Error allocating temporary private key");
+		asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
 		return NULL;
 	}
 
 	int ret = wc_dilithium_init_id(key, id, len, NULL, INVALID_DEVID);
 	if (ret != 0)
 	{
-		// LOG_ERR("Error creating new key: %d", ret);
+		asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
 		free(key);
 		return NULL;
 	}
@@ -224,7 +222,7 @@ dilithium_key* create_dilithium_key_from_buffer(int key_format, uint8_t const* d
 	ret = wc_dilithium_import_private_key(der_buffer, der_size, NULL, 0, key);
 	if (ret != 0)
 	{
-		// LOG_ERR("Error parsing the DER key: %d", ret);
+		asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
 		wc_dilithium_free(key);
 		free(key);
 		return NULL;
@@ -248,14 +246,14 @@ falcon_key* create_falcon_key_from_buffer(int key_format, uint8_t const* der_buf
 	falcon_key* key = (falcon_key*) malloc(sizeof(falcon_key));
 	if (key == NULL)
 	{
-		// LOG_ERR("Error allocating temporary private key");
+		asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
 		return NULL;
 	}
 
 	int ret = wc_falcon_init_id(key, id, len, NULL, INVALID_DEVID);
 	if (ret != 0)
 	{
-		// LOG_ERR("Error creating new key: %d", ret);
+		asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
 		free(key);
 		return NULL;
 	}
@@ -274,7 +272,7 @@ falcon_key* create_falcon_key_from_buffer(int key_format, uint8_t const* der_buf
 	ret = wc_falcon_import_private_key(der_buffer, der_size, NULL, 0, key);
 	if (ret != 0)
 	{
-		// LOG_ERR("Error parsing the DER key: %d", ret);
+		asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
 		wc_falcon_free(key);
 		free(key);
 		return NULL;
@@ -297,14 +295,14 @@ RsaKey* create_rsa_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size,
 	RsaKey* key = (RsaKey*) malloc(sizeof(RsaKey));
 	if (key == NULL)
 	{
-		// LOG_ERR("Error allocating temporary private key");
+		asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
 		return NULL;
 	}
 
 	int ret = wc_InitRsaKey_Id(key, (uint8_t*)id, len, NULL, INVALID_DEVID);
 	if (ret != 0)
 	{
-		// LOG_ERR("Error creating new key: %d", ret);
+		asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
 		free(key);
 		return NULL;
 	}
@@ -314,7 +312,7 @@ RsaKey* create_rsa_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size,
 	ret = wc_RsaPrivateKeyDecode(der_buffer, &index, key, der_size);
 	if (ret != 0)
 	{
-		// LOG_ERR("Error parsing the DER key: %d", ret);
+		asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
 		wc_FreeRsaKey(key);
 		free(key);
 		return NULL;
@@ -337,14 +335,14 @@ ecc_key* create_ecc_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size
 	ecc_key* key = (ecc_key*) malloc(sizeof(ecc_key));
 	if (key == NULL)
 	{
-		// LOG_ERR("Error allocating temporary private key");
+		asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
 		return NULL;
 	}
 
 	int ret = wc_ecc_init_id(key, (uint8_t*)id, len, NULL, INVALID_DEVID);
 	if (ret != 0)
 	{
-		// LOG_ERR("Error creating new key: %d", ret);
+		asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
 		free(key);
 		return NULL;
 	}
@@ -354,7 +352,7 @@ ecc_key* create_ecc_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size
 	ret = wc_EccPrivateKeyDecode(der_buffer, &index, key, der_size);
 	if (ret != 0)
 	{
-		// LOG_ERR("Error parsing the DER key: %d", ret);
+		asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
 		wc_ecc_free(key);
 		free(key);
 		return NULL;

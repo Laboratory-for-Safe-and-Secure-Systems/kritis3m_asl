@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-// #include "asl.h"
-
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/ssl.h"
 #include "wolfssl/wolfcrypt/wc_pkcs11.h"
