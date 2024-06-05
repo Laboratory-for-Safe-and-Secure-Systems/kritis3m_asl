@@ -97,7 +97,7 @@ int asl_set_log_level(int32_t new_log_level)
 
 
 /* Check return value for an error. Print error message in case. */
-int errorOccured(int32_t ret)
+int wolfssl_check_for_error(int32_t ret)
 {
 	if (ret != WOLFSSL_SUCCESS)
 	{

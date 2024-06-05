@@ -7,16 +7,23 @@ if(CONFIG_KRITIS3M_ASL)
 
         zephyr_include_directories(
                 ${ZEPHYR_CURRENT_MODULE_DIR}/include
+                ${CMAKE_CURRENT_BINARY_DIR}
         )
 
         zephyr_library()
         zephyr_library_sources(${ZEPHYR_CURRENT_MODULE_DIR}/src/asl.c)
+        zephyr_library_sources(${ZEPHYR_CURRENT_MODULE_DIR}/src/asl_logging.c)
 
         # Add PKCS11 related stuff
         if(CONFIG_KRITIS3M_ASL_PKCS11)
                 zephyr_library_sources(
                         ${ZEPHYR_CURRENT_MODULE_DIR}/src/wolfssl_pkcs11_pqc.c
                 )
+                set(KRITIS3M_ASL_ENABLE_PKCS11 ON)
+        endif()
+
+        if(CONFIG_KRITIS3M_ASL_INTERNAL_API)
+                set(KRITIS3M_ASL_ENABLE_INTERNAL_API ON)
         endif()
 
         zephyr_library_link_libraries(kritis3m_asl)
@@ -29,4 +36,8 @@ if(CONFIG_KRITIS3M_ASL)
         target_link_libraries(kritis3m_asl INTERFACE wolfSSL)
 
         target_link_libraries(kritis3m_asl INTERFACE zephyr_interface)
+
+        # Write the configuration into a file
+        configure_file(${ZEPHYR_CURRENT_MODULE_DIR}/src/priv_include/asl_config.h.in asl_config.h)
+
 endif()

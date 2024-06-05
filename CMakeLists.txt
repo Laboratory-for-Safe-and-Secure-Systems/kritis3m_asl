@@ -75,7 +75,7 @@ target_include_directories(wolfssl PUBLIC $<BUILD_INTERFACE:${OQS_BINARY_DIR}/..
 target_link_libraries(wolfssl PRIVATE oqs)
 
 
-# Write the configuration intot a file
+# Write the configuration into a file
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/priv_include/asl_config.h.in asl_config.h)
 
 

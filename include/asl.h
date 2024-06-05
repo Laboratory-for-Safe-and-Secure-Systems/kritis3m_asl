@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <time.h>
 
+#include "asl_config.h"
 
 /* Error types of the library */
 enum ASL_ERROR_CODES
@@ -38,9 +39,9 @@ typedef void (*asl_custom_log_callback)(int32_t level, char const* message);
 /* Data structure for the library configuration */
 typedef struct
 {
-        bool loggingEnabled;
-        int32_t logLevel;
-        asl_custom_log_callback customLogCallback;
+        bool logging_enabled;
+        int32_t log_level;
+        asl_custom_log_callback custom_log_callback;
 
         bool secure_element_support;
         char const* secure_element_middleware_path;
@@ -110,8 +111,8 @@ typedef struct asl_session asl_session;
 typedef struct
 {
         uint32_t duration_us;
-        uint32_t txBytes;
-        uint32_t rxBytes;
+        uint32_t tx_bytes;
+        uint32_t rx_bytes;
 }
 asl_handshake_metrics;
 

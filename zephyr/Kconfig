@@ -14,4 +14,10 @@ config KRITIS3M_ASL_PKCS11
 	help
 	  This option enables PKCS#11 support in the KRITIS3M Abstract Security Library.
 
+config KRITIS3M_ASL_INTERNAL_API
+	bool "Enable access to WolfSSL internal API"
+	depends on KRITIS3M_ASL
+	help
+	  This option enables access to the internal WolfSSL API in the KRITIS3M Abstract Security Library.
+
 endmenu
