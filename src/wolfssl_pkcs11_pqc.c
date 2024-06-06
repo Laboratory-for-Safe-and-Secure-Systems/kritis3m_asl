@@ -77,90 +77,97 @@ int pkcs11_import_pem_key(asl_pkcs11_module* module, uint8_t const* pem_buffer, 
 	int keyFormat = 0;
 	int type = 0;
 	void* key = NULL;
-	int ret = -1;
+	int ret = 0;
+	uint32_t consumed = 0;
 
 	memset(&info, 0, sizeof(EncryptedInfo));
 
-	/* Convert key to DER (binary) */
-	ret = PemToDer(pem_buffer, pem_size, PRIVATEKEY_TYPE, &der, NULL,
-		       &info, &keyFormat);
-	if (ret < 0)
+	/* As the PEM file may contain more than one private key in case of a hybrid certificate,
+	 * we have to parse the file in a loop. */
+	while ((consumed < pem_size) && (ret == 0))
 	{
+		/* Convert key to DER (binary) */
+		ret = PemToDer(pem_buffer + consumed, pem_size - consumed, PRIVATEKEY_TYPE, &der, NULL,
+			&info, &keyFormat);
+		if (ret < 0)
+		{
+			FreeDer(&der);
+			asl_log(ASL_LOG_LEVEL_ERR, "Error converting private key to DER");
+			return -1;
+		}
+		consumed += info.consumed;
+
+		/* Check which key type we have */
+		if (keyFormat == RSAk)
+		{
+			/* Create the key object */
+			key = create_rsa_key_from_buffer(der->buffer, der->length, id, len);
+
+			type = PKCS11_KEY_TYPE_RSA;
+		}
+		else if (keyFormat == ECDSAk)
+		{
+			/* Create the key object */
+			key = create_ecc_key_from_buffer(der->buffer, der->length, id, len);
+
+			type = PKCS11_KEY_TYPE_EC;
+		}
+		else if ((keyFormat == FALCON_LEVEL1k) || (keyFormat == FALCON_LEVEL5k))
+		{
+			/* Create the key object */
+			key = create_falcon_key_from_buffer(keyFormat, der->buffer, der->length,
+							id, len);
+
+			type = PKCS11_KEY_TYPE_FALCON;
+		}
+		else if ((keyFormat == DILITHIUM_LEVEL2k) || (keyFormat == DILITHIUM_LEVEL3k) ||
+			(keyFormat == DILITHIUM_LEVEL5k))
+		{
+			/* Create the key object */
+			key = create_dilithium_key_from_buffer(keyFormat, der->buffer, der->length,
+							id, len);
+
+			type = PKCS11_KEY_TYPE_DILITHIUM;
+		}
+
+		if (key == NULL)
+		{
+			FreeDer(&der);
+			asl_log(ASL_LOG_LEVEL_ERR, "Error creating private key object");
+			return -1;
+		}
+
+		/* Import the key into the secure element */
+		ret = wc_Pkcs11StoreKey_ex(&module->token, type, 1, key, 1);
+		if (ret != 0)
+		{
+			asl_log(ASL_LOG_LEVEL_ERR, "Error importing private key into secure element: %d", ret);
+			ret = -1;
+		}
+
+		/* Free key */
+		switch (keyFormat)
+		{
+		case RSAk:
+			wc_FreeRsaKey(key);
+			break;
+		case ECDSAk:
+			wc_ecc_free(key);
+			break;
+		case FALCON_LEVEL1k:
+		case FALCON_LEVEL5k:
+			wc_falcon_free(key);
+			break;
+		case DILITHIUM_LEVEL2k:
+		case DILITHIUM_LEVEL3k:
+		case DILITHIUM_LEVEL5k:
+			wc_dilithium_free(key);
+			break;
+		}
+		free(key);
+
 		FreeDer(&der);
-		asl_log(ASL_LOG_LEVEL_ERR, "Error converting private key to DER");
-		return -1;
 	}
-
-	/* Check which key type we have */
-	if (keyFormat == RSAk)
-	{
-		/* Create the key object */
-		key = create_rsa_key_from_buffer(der->buffer, der->length, id, len);
-
-		type = PKCS11_KEY_TYPE_RSA;
-	}
-	else if (keyFormat == ECDSAk)
-	{
-		/* Create the key object */
-		key = create_ecc_key_from_buffer(der->buffer, der->length, id, len);
-
-		type = PKCS11_KEY_TYPE_EC;
-	}
-	else if ((keyFormat == FALCON_LEVEL1k) || (keyFormat == FALCON_LEVEL5k))
-	{
-		/* Create the key object */
-		key = create_falcon_key_from_buffer(keyFormat, der->buffer, der->length,
-						    id, len);
-
-		type = PKCS11_KEY_TYPE_FALCON;
-	}
-    	else if ((keyFormat == DILITHIUM_LEVEL2k) || (keyFormat == DILITHIUM_LEVEL3k) ||
-        	 (keyFormat == DILITHIUM_LEVEL5k))
-	{
-		/* Create the key object */
-		key = create_dilithium_key_from_buffer(keyFormat, der->buffer, der->length,
-						       id, len);
-
-		type = PKCS11_KEY_TYPE_DILITHIUM;
-        }
-
-	if (key == NULL)
-	{
-		FreeDer(&der);
-		asl_log(ASL_LOG_LEVEL_ERR, "Error creating private key object");
-		return -1;
-	}
-
-	/* Import the key into the secure element */
-	ret = wc_Pkcs11StoreKey_ex(&module->token, type, 1, key, 1);
-	if (ret != 0)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error importing private key into secure element: %d", ret);
-		ret = -1;
-	}
-
-	/* Free key */
-	switch (keyFormat)
-	{
-	case RSAk:
-		wc_FreeRsaKey(key);
-		break;
-	case ECDSAk:
-		wc_ecc_free(key);
-		break;
-	case FALCON_LEVEL1k:
-	case FALCON_LEVEL5k:
-		wc_falcon_free(key);
-		break;
-	case DILITHIUM_LEVEL2k:
-	case DILITHIUM_LEVEL3k:
-	case DILITHIUM_LEVEL5k:
-		wc_dilithium_free(key);
-		break;
-	}
-	free(key);
-
-	FreeDer(&der);
 
 	return ret;
 #else
