@@ -33,6 +33,7 @@ extern "C" {
 #define NO_OLD_RNGNAME
 #define WOLFSSL_NO_SOCK
 #define NO_PKCS11_ECDH
+#define NO_PKCS11_EC_KEYGEN
 
 
 /* Enable experimental features */
