@@ -54,9 +54,12 @@ extern "C" {
 #define WOLFSSL_SHAKE256
 #define HAVE_HKDF
 #define HAVE_AESGCM
+#define WOLFSSL_HAVE_KYBER
+#define WOLFSSL_WC_KYBER
+#define HAVE_DILITHIUM
+#define WOLFSSL_WC_DILITHIUM
 #define HAVE_LIBOQS
 #define WOLFSSL_NO_SPHINCS
-// #define WOLFSSL_WC_KYBER
 
 #define NO_SHA
 #define NO_MD4

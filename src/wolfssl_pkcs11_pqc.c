@@ -195,6 +195,8 @@ int pkcs11_import_pem_key(asl_pkcs11_module* module, uint8_t const* pem_buffer, 
 dilithium_key* create_dilithium_key_from_buffer(int key_format, uint8_t const* der_buffer,
 						uint32_t der_size, uint8_t const* id, int len)
 {
+	word32 idx = 0;
+
 	/* Allocate new key */
 	dilithium_key* key = (dilithium_key*) malloc(sizeof(dilithium_key));
 	if (key == NULL)
@@ -226,7 +228,7 @@ dilithium_key* create_dilithium_key_from_buffer(int key_format, uint8_t const* d
 	}
 
 	/* Import the actual private key from the DER buffer */
-	ret = wc_dilithium_import_private_key(der_buffer, der_size, NULL, 0, key);
+	ret = wc_Dilithium_PrivateKeyDecode(der_buffer, &idx, key, der_size);
 	if (ret != 0)
 	{
 		asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
