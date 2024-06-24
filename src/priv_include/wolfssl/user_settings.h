@@ -59,7 +59,6 @@ extern "C" {
 #define HAVE_DILITHIUM
 #define WOLFSSL_WC_DILITHIUM
 #define HAVE_LIBOQS
-#define WOLFSSL_NO_SPHINCS
 
 #define NO_SHA
 #define NO_MD4
@@ -69,6 +68,7 @@ extern "C" {
 #define NO_DH
 #define NO_RC4
 #define NO_AES_192
+#define WOLFSSL_NO_SPHINCS
 
 
 /* Debugging */
