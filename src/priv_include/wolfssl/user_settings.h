@@ -69,6 +69,8 @@ extern "C" {
 // #define WOLFSSL_DILITHIUM_SMALL
 // #define WOLFSSL_SMALL_STACK
 
+#define WOLFSSL_KEEP_DECODED_PRIVATE_KEY
+
 #define NO_SHA
 #define NO_MD4
 #define NO_MD5
