@@ -500,6 +500,11 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 		return NULL;
 	}
 
+	new_endpoint->secure_element.initialized = false;
+#if defined(HAVE_SECRET_CALLBACK)
+        new_endpoint->keylog_file = config->keylog_file;
+#endif
+
         /* Create the TLS server context */
 	new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_server_method_ex(wolfssl_heap), wolfssl_heap);
 	if (new_endpoint->wolfssl_context == NULL)
@@ -549,10 +554,6 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 	        return NULL;
         }
 
-#ifdef HAVE_SECRET_CALLBACK
-	new_endpoint->keylog_file = config->keylog_file;
-#endif
-
         return new_endpoint;
 }
 
@@ -578,6 +579,11 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 		asl_log(ASL_LOG_LEVEL_ERR, "Unable to allocate memory for new WolfSSL endpoint");
 		return NULL;
 	}
+
+	new_endpoint->secure_element.initialized = false;
+#if defined(HAVE_SECRET_CALLBACK)
+        new_endpoint->keylog_file = config->keylog_file;
+#endif
 
         /* Create the TLS client context */
 	new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_client_method_ex(wolfssl_heap), wolfssl_heap);
@@ -638,10 +644,6 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 		free(new_endpoint);
 	        return NULL;
         }
-
-#ifdef HAVE_SECRET_CALLBACK
-	new_endpoint->keylog_file = config->keylog_file;
-#endif
 
         return new_endpoint;
 }
