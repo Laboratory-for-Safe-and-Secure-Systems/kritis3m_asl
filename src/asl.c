@@ -67,8 +67,11 @@ struct asl_session
 /* Internal method declarations */
 static int wolfssl_read_callback(WOLFSSL* session, char* buffer, int size, void* ctx);
 static int wolfssl_write_callback(WOLFSSL* session, char* buffer, int size, void* ctx);
-static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path);
 static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
+
+#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path);
+#endif
 
 
 static int wolfssl_read_callback(WOLFSSL* wolfssl, char* buffer, int size, void* ctx)
@@ -243,20 +246,23 @@ int asl_init(asl_configuration const* config)
 }
 
 
+#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+
 /* Configure a PKCS11 module for an endpoint.
  *
  * Returns 0 on success, negative error code on failure (error message is logged to the console).
  */
 static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path)
 {
+	int ret = 0;
+
 	/* Load the secure element middleware */
 	if ((module != NULL) && (path != NULL))
 	{
-	#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
 		asl_log(ASL_LOG_LEVEL_INF, "Initializing secure element");
 
 		/* Initialize the PKCS#11 library */
-		int ret = wc_Pkcs11_Initialize(&module->device, path, wolfssl_heap);
+		ret = wc_Pkcs11_Initialize(&module->device, path, wolfssl_heap);
 		if (ret != 0)
 		{
 			asl_log(ASL_LOG_LEVEL_ERR, "unable to initialize PKCS#11 library: %d", ret);
@@ -299,15 +305,17 @@ static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path)
 			asl_log(ASL_LOG_LEVEL_ERR, "Secure element initialization failed: %d", ret);
 			return ASL_PKCS11_ERROR;
 		}
-	#else
-		asl_log(ASL_LOG_LEVEL_ERR, "Secure element support is not compiled in, please compile with support enabled");
-	#endif
 	}
 	else
 	{
 		module->initialized = false;
+		ret = 1;
 	}
+
+	return ret;
 }
+
+#endif /* KRITIS3M_ASL_ENABLE_PKCS11 */
 
 
 /* Configure the new endpoint (role-independent configuration).
@@ -964,8 +972,10 @@ void asl_free_endpoint(asl_endpoint* endpoint)
 		/* Properly cleanup PKCS#11 stuff*/
 		if (endpoint->secure_element.initialized == true)
 		{
+		#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
 			wc_Pkcs11Token_Final(&endpoint->secure_element.token);
 			wc_Pkcs11_Finalize(&endpoint->secure_element.device);
+		#endif
 		}
 
 		/* Free the WolfSSL context */
