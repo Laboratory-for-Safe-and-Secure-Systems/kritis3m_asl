@@ -42,9 +42,6 @@ typedef struct
         bool logging_enabled;
         int32_t log_level;
         asl_custom_log_callback custom_log_callback;
-
-        bool secure_element_support;
-        char const* secure_element_middleware_path;
 }
 asl_configuration;
 
@@ -64,10 +61,11 @@ typedef struct
 {
         bool mutual_authentication;
         bool no_encryption;
+        enum asl_hybrid_signature_mode hybrid_signature_mode;
+
         bool use_secure_element;
         bool secure_element_import_keys;
-
-        enum asl_hybrid_signature_mode hybrid_signature_mode;
+        char const* secure_element_middleware_path;
 
         struct
         {

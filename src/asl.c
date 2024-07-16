@@ -38,7 +38,8 @@ enum connection_state
 /* Data structure for an endpoint */
 struct asl_endpoint
 {
-        WOLFSSL_CTX* context;
+        WOLFSSL_CTX* wolfssl_context;
+	asl_pkcs11_module secure_element;
 
 #if defined(HAVE_SECRET_CALLBACK)
         char const* keylog_file;
@@ -49,7 +50,7 @@ struct asl_endpoint
 /* Data structure for an active session */
 struct asl_session
 {
-        WOLFSSL* session;
+        WOLFSSL* wolfssl_session;
 	enum connection_state state;
 
         struct
@@ -63,14 +64,11 @@ struct asl_session
 };
 
 
-/* PKCS#11 module for the secure element */
-static asl_pkcs11_module secure_element;
-
-
 /* Internal method declarations */
 static int wolfssl_read_callback(WOLFSSL* session, char* buffer, int size, void* ctx);
 static int wolfssl_write_callback(WOLFSSL* session, char* buffer, int size, void* ctx);
-static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configuration const* config);
+static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path);
+static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
 
 
 static int wolfssl_read_callback(WOLFSSL* wolfssl, char* buffer, int size, void* ctx)
@@ -241,15 +239,24 @@ int asl_init(asl_configuration const* config)
 	}
 #endif
 
+        return ASL_SUCCESS;
+}
+
+
+/* Configure a PKCS11 module for an endpoint.
+ *
+ * Returns 0 on success, negative error code on failure (error message is logged to the console).
+ */
+static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path)
+{
 	/* Load the secure element middleware */
-	if ((config->secure_element_support == true) && (config->secure_element_middleware_path != NULL))
+	if ((module != NULL) && (path != NULL))
 	{
 	#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
 		asl_log(ASL_LOG_LEVEL_INF, "Initializing secure element");
 
 		/* Initialize the PKCS#11 library */
-		ret = wc_Pkcs11_Initialize(&secure_element.device,
-					   config->secure_element_middleware_path, wolfssl_heap);
+		int ret = wc_Pkcs11_Initialize(&module->device, path, wolfssl_heap);
 		if (ret != 0)
 		{
 			asl_log(ASL_LOG_LEVEL_ERR, "unable to initialize PKCS#11 library: %d", ret);
@@ -257,40 +264,38 @@ int asl_init(asl_configuration const* config)
 		}
 
 		/* Initialize the token */
-		ret = wc_Pkcs11Token_Init_NoLogin(&secure_element.token,
-					  	  &secure_element.device,
-					  	  -1, NULL);
+		ret = wc_Pkcs11Token_Init_NoLogin(&module->token, &module->device, -1, NULL);
 		if (ret != 0)
 		{
 			asl_log(ASL_LOG_LEVEL_ERR, "unable to initialize PKCS#11 token: %d", ret);
-			wc_Pkcs11_Finalize(&secure_element.device);
+			wc_Pkcs11_Finalize(&module->device);
 			return ASL_PKCS11_ERROR;
 		}
 
 		/* Register the device with WolfSSL */
 		ret = wc_CryptoCb_RegisterDevice(secure_element_device_id(),
 						 wc_Pkcs11_CryptoDevCb,
-						 &secure_element.token);
+						 &module->token);
 		if (ret != 0)
 		{
 			asl_log(ASL_LOG_LEVEL_ERR, "Failed to register PKCS#11 callback: %d", ret);
-			wc_Pkcs11Token_Final(&secure_element.token);
-			wc_Pkcs11_Finalize(&secure_element.device);
+			wc_Pkcs11Token_Final(&module->token);
+			wc_Pkcs11_Finalize(&module->device);
 			return ASL_PKCS11_ERROR;
 		}
 
 		/* Create a persistent session with the secure element */
-		ret = wc_Pkcs11Token_Open(&secure_element.token, 1);
+		ret = wc_Pkcs11Token_Open(&module->token, 1);
 		if (ret == 0)
 		{
-			secure_element.initialized = true;
+			module->initialized = true;
 			asl_log(ASL_LOG_LEVEL_INF, "Secure element initialized");
 		}
 		else
 		{
-			secure_element.initialized = false;
-			wc_Pkcs11Token_Final(&secure_element.token);
-			wc_Pkcs11_Finalize(&secure_element.device);
+			module->initialized = false;
+			wc_Pkcs11Token_Final(&module->token);
+			wc_Pkcs11_Finalize(&module->device);
 			asl_log(ASL_LOG_LEVEL_ERR, "Secure element initialization failed: %d", ret);
 			return ASL_PKCS11_ERROR;
 		}
@@ -300,26 +305,24 @@ int asl_init(asl_configuration const* config)
 	}
 	else
 	{
-		secure_element.initialized = false;
+		module->initialized = false;
 	}
-
-        return ASL_SUCCESS;
 }
 
 
-/* Configure the new context.
+/* Configure the new endpoint (role-independent configuration).
  *
  * Returns 0 on success, negative error code on failure (error message is logged to the console).
  */
-static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configuration const* config)
+static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config)
 {
         /* Only allow TLS version 1.3 */
-	int ret = wolfSSL_CTX_SetMinVersion(context, WOLFSSL_TLSV1_3);
+	int ret = wolfSSL_CTX_SetMinVersion(endpoint->wolfssl_context, WOLFSSL_TLSV1_3);
 	if (wolfssl_check_for_error(ret))
 		return ASL_INTERNAL_ERROR;
 
 	/* Load root certificate */
-	ret = wolfSSL_CTX_load_verify_buffer(context,
+	ret = wolfSSL_CTX_load_verify_buffer(endpoint->wolfssl_context,
 					     config->root_certificate.buffer,
 					     config->root_certificate.size,
 					     WOLFSSL_FILETYPE_PEM);
@@ -329,7 +332,7 @@ static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configur
 	/* Load device certificate chain */
 	if (config->device_certificate_chain.buffer != NULL)
 	{
-		ret = wolfSSL_CTX_use_certificate_chain_buffer_format(context,
+		ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
 								config->device_certificate_chain.buffer,
 								config->device_certificate_chain.size,
 								WOLFSSL_FILETYPE_PEM);
@@ -339,9 +342,17 @@ static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configur
 
 	/* Load the private key */
 	bool privateKeyLoaded = false;
-	if (secure_element.initialized == true && config->use_secure_element == true)
+	if (config->use_secure_element == true && config->secure_element_middleware_path != NULL)
 	{
 	#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+		/* Initialize the PKCS#11 module */
+		ret = wolfssl_configure_pkcs11(&endpoint->secure_element, config->secure_element_middleware_path);
+		if (ret != 0)
+		{
+			asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure secure element");
+			return ASL_PKCS11_ERROR;
+		}
+
 		// wolfSSL_CTX_SetDevId(context, secure_element_device_id());
 
 		/* Import private key into secure element if requested */
@@ -349,7 +360,7 @@ static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configur
 		{
 			if (config->private_key.buffer != NULL)
 			{
-				ret = pkcs11_import_pem_key(&secure_element,
+				ret = pkcs11_import_pem_key(&endpoint->secure_element,
 							    config->private_key.buffer,
 							    config->private_key.size,
 							    secure_element_private_key_id(),
@@ -368,7 +379,7 @@ static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configur
 
 			if (config->private_key.additional_key_buffer != NULL)
 			{
-				ret = pkcs11_import_pem_key(&secure_element,
+				ret = pkcs11_import_pem_key(&endpoint->secure_element,
 							    config->private_key.additional_key_buffer,
 							    config->private_key.additional_key_size,
 							    secure_element_private_key_id(),
@@ -382,18 +393,21 @@ static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configur
 		}
 
 		/* Use keys on the secure element (this also loads the id for the alt key) */
-		ret = wolfSSL_CTX_use_PrivateKey_Id(context,
+		ret = wolfSSL_CTX_use_PrivateKey_Id(endpoint->wolfssl_context,
 						    secure_element_private_key_id(),
 						    secure_element_private_key_id_size(),
 						    secure_element_device_id());
 
 		privateKeyLoaded = true;
+	#else
+		asl_log(ASL_LOG_LEVEL_ERR, "Secure element support is not compiled in, please compile with support enabled");
+		return ASL_PKCS11_ERROR;
 	#endif
 	}
 	else if (config->private_key.buffer != NULL)
 	{
 		/* Load the private key from the buffer */
-		ret = wolfSSL_CTX_use_PrivateKey_buffer(context,
+		ret = wolfSSL_CTX_use_PrivateKey_buffer(endpoint->wolfssl_context,
 							config->private_key.buffer,
 							config->private_key.size,
 							WOLFSSL_FILETYPE_PEM);
@@ -404,7 +418,7 @@ static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configur
 			if (wolfssl_check_for_error(ret))
 				return ASL_INTERNAL_ERROR;
 
-			ret = wolfSSL_CTX_use_AltPrivateKey_buffer(context,
+			ret = wolfSSL_CTX_use_AltPrivateKey_buffer(endpoint->wolfssl_context,
 					config->private_key.additional_key_buffer,
 					config->private_key.additional_key_size,
 					WOLFSSL_FILETYPE_PEM);
@@ -420,7 +434,7 @@ static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configur
 	/* Check if the private key and the device certificate match */
 	if (privateKeyLoaded == true)
 	{
-		ret = wolfSSL_CTX_check_private_key(context);
+		ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
 		if (wolfssl_check_for_error(ret))
 			return ASL_INTERNAL_ERROR;
 	}
@@ -435,14 +449,14 @@ static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configur
         	WOLFSSL_P384_KYBER_LEVEL3,
         	WOLFSSL_P521_KYBER_LEVEL5,
 	};
-	ret = wolfSSL_CTX_set_groups(context, wolfssl_key_exchange_curves,
+	ret = wolfSSL_CTX_set_groups(endpoint->wolfssl_context, wolfssl_key_exchange_curves,
 				     sizeof(wolfssl_key_exchange_curves) / sizeof(int));
 	if (wolfssl_check_for_error(ret))
 		return ASL_INTERNAL_ERROR;
 
 	/* Set the IO callbacks for send and receive */
-	wolfSSL_CTX_SetIORecv(context, wolfssl_read_callback);
-	wolfSSL_CTX_SetIOSend(context, wolfssl_write_callback);
+	wolfSSL_CTX_SetIORecv(endpoint->wolfssl_context, wolfssl_read_callback);
+	wolfSSL_CTX_SetIOSend(endpoint->wolfssl_context, wolfssl_write_callback);
 
 	/* Configure peer authentification */
 	int verify_mode = WOLFSSL_VERIFY_NONE;
@@ -450,7 +464,7 @@ static int wolfssl_configure_context(WOLFSSL_CTX* context, asl_endpoint_configur
 	{
 		verify_mode = WOLFSSL_VERIFY_PEER | WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT;
 	}
-	wolfSSL_CTX_set_verify(context, verify_mode, NULL);
+	wolfSSL_CTX_set_verify(endpoint->wolfssl_context, verify_mode, NULL);
 
 	return ASL_SUCCESS;
 }
@@ -479,20 +493,20 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 	}
 
         /* Create the TLS server context */
-	new_endpoint->context = wolfSSL_CTX_new_ex(wolfTLS_server_method_ex(wolfssl_heap), wolfssl_heap);
-	if (new_endpoint->context == NULL)
+	new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_server_method_ex(wolfssl_heap), wolfssl_heap);
+	if (new_endpoint->wolfssl_context == NULL)
 	{
 		asl_log(ASL_LOG_LEVEL_ERR, "Unable to create a new WolfSSL server context");
 		free(new_endpoint);
 		return NULL;
 	}
 
-	/* Configure the new context */
-        int ret = wolfssl_configure_context(new_endpoint->context, config);
+	/* Configure the new endpoint */
+        int ret = wolfssl_configure_endpoint(new_endpoint, config);
         if (ret != ASL_SUCCESS)
         {
                 asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure new TLS server context");
-                wolfSSL_CTX_free(new_endpoint->context);
+                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
 		free(new_endpoint);
 	        return NULL;
         }
@@ -501,11 +515,11 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 	 * We only support AES GCM with 256 bit key length and the
 	 * integrity only cipher with SHA384.
 	 */
-	ret = wolfSSL_CTX_set_cipher_list(new_endpoint->context,
+	ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context,
 				"TLS13-AES256-GCM-SHA384:TLS13-SHA384-SHA384");
 	if (wolfssl_check_for_error(ret))
 	{
-                wolfSSL_CTX_free(new_endpoint->context);
+                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
 		free(new_endpoint);
 	        return NULL;
         }
@@ -519,10 +533,10 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 	    WOLFSSL_CKS_SIGSPEC_ALTERNATIVE
         };
 
-        ret = wolfSSL_CTX_UseCKS(new_endpoint->context, cks_order, sizeof(cks_order));
+        ret = wolfSSL_CTX_UseCKS(new_endpoint->wolfssl_context, cks_order, sizeof(cks_order));
 	if (wolfssl_check_for_error(ret))
 	{
-                wolfSSL_CTX_free(new_endpoint->context);
+                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
 		free(new_endpoint);
 	        return NULL;
         }
@@ -558,20 +572,20 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 	}
 
         /* Create the TLS client context */
-	new_endpoint->context = wolfSSL_CTX_new_ex(wolfTLS_client_method_ex(wolfssl_heap), wolfssl_heap);
-	if (new_endpoint->context == NULL)
+	new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_client_method_ex(wolfssl_heap), wolfssl_heap);
+	if (new_endpoint->wolfssl_context == NULL)
 	{
 		asl_log(ASL_LOG_LEVEL_ERR, "Unable to create a new WolfSSL client context");
 		free(new_endpoint);
 		return NULL;
 	}
 
-	/* Configure the new context */
-        int ret = wolfssl_configure_context(new_endpoint->context, config);
+	/* Configure the new endpoint */
+        int ret = wolfssl_configure_endpoint(new_endpoint, config);
         if (ret != ASL_SUCCESS)
         {
                 asl_log(ASL_LOG_LEVEL_ERR, "Failed to confiugre new TLS client context\r\n");
-                wolfSSL_CTX_free(new_endpoint->context);
+                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
 		free(new_endpoint);
 	        return NULL;
         }
@@ -585,10 +599,10 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 	{
 		cipher_list = "TLS13-SHA384-SHA384";
 	}
-	ret = wolfSSL_CTX_set_cipher_list(new_endpoint->context, cipher_list);
+	ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context, cipher_list);
 	if (wolfssl_check_for_error(ret))
 	{
-                wolfSSL_CTX_free(new_endpoint->context);
+                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
 		free(new_endpoint);
 	        return NULL;
         }
@@ -609,10 +623,10 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 			cks[0] = WOLFSSL_CKS_SIGSPEC_BOTH;
 			break;
         };
-        ret = wolfSSL_CTX_UseCKS(new_endpoint->context, cks, sizeof(cks));
+        ret = wolfSSL_CTX_UseCKS(new_endpoint->wolfssl_context, cks, sizeof(cks));
 	if (wolfssl_check_for_error(ret))
 	{
-                wolfSSL_CTX_free(new_endpoint->context);
+                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
 		free(new_endpoint);
 	        return NULL;
         }
@@ -649,8 +663,8 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
 	}
 
 	/* Create a new TLS session */
-	new_session->session = wolfSSL_new(endpoint->context);
-	if (new_session->session == NULL)
+	new_session->wolfssl_session = wolfSSL_new(endpoint->wolfssl_context);
+	if (new_session->wolfssl_session == NULL)
 	{
 		asl_log(ASL_LOG_LEVEL_ERR, "Unable to create a new WolfSSL session");
 		free(new_session);
@@ -663,23 +677,23 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
 	new_session->handshake_metrics_priv.rx_bytes = 0;
 
 	/* Store the socket fd */
-	wolfSSL_set_fd(new_session->session, socket_fd);
+	wolfSSL_set_fd(new_session->wolfssl_session, socket_fd);
 
 	/* Store a pointer to our session object to get access to the metrics from
 	 * the read and write callback. This must be done AFTER the call to
 	 * wolfSSL_set_fd() as this method overwrites the ctx variables.
 	 */
-	wolfSSL_SetIOReadCtx(new_session->session, new_session);
-	wolfSSL_SetIOWriteCtx(new_session->session, new_session);
+	wolfSSL_SetIOReadCtx(new_session->wolfssl_session, new_session);
+	wolfSSL_SetIOWriteCtx(new_session->wolfssl_session, new_session);
 
 #ifdef HAVE_SECRET_CALLBACK
 	if (endpoint->keylog_file != NULL)
 	{
 		/* required for getting random used */
-		wolfSSL_KeepArrays(new_session->session);
+		wolfSSL_KeepArrays(new_session->wolfssl_session);
 
 		/* optional logging for wireshark */
-		wolfSSL_set_tls13_secret_cb(new_session->session,
+		wolfSSL_set_tls13_secret_cb(new_session->wolfssl_session,
 					    wolfssl_secret_callback,
 					    (void*)endpoint->keylog_file);
 	}
@@ -719,7 +733,7 @@ int asl_handshake(asl_session* session)
 
 	while (ret != 0)
 	{
-		ret = wolfSSL_negotiate(session->session);
+		ret = wolfSSL_negotiate(session->wolfssl_session);
 
 		if (ret == WOLFSSL_SUCCESS)
 		{
@@ -733,7 +747,7 @@ int asl_handshake(asl_session* session)
 			}
 
 		#ifdef HAVE_SECRET_CALLBACK
-        		wolfSSL_FreeArrays(session->session);
+        		wolfSSL_FreeArrays(session->wolfssl_session);
     		#endif
 
 			ret = ASL_SUCCESS;
@@ -741,7 +755,7 @@ int asl_handshake(asl_session* session)
 		}
 		else
 		{
-			ret = wolfSSL_get_error(session->session, ret);
+			ret = wolfSSL_get_error(session->wolfssl_session, ret);
 
 			if (ret == WOLFSSL_ERROR_WANT_READ)
 			{
@@ -787,11 +801,11 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
 
 	while (1)
 	{
-		int ret = wolfSSL_read(session->session, tmp, max_size - bytes_read);
+		int ret = wolfSSL_read(session->wolfssl_session, tmp, max_size - bytes_read);
 
 		if (ret <= 0)
 		{
-			ret = wolfSSL_get_error(session->session, ret);
+			ret = wolfSSL_get_error(session->wolfssl_session, ret);
 
 			if (ret == WOLFSSL_ERROR_WANT_WRITE)
 			{
@@ -849,7 +863,7 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
 
 	while (size > 0)
 	{
-		ret = wolfSSL_write(session->session, tmp, size);
+		ret = wolfSSL_write(session->wolfssl_session, tmp, size);
 
 		if (ret > 0)
 		{
@@ -860,7 +874,7 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
 		}
 		else
 		{
-			ret = wolfSSL_get_error(session->session, ret);
+			ret = wolfSSL_get_error(session->wolfssl_session, ret);
 
             		if (ret == WOLFSSL_ERROR_WANT_READ)
 			{
@@ -921,7 +935,7 @@ void asl_close_session(asl_session* session)
 {
 	if (session != NULL)
 	{
-		wolfSSL_shutdown(session->session);
+		wolfSSL_shutdown(session->wolfssl_session);
 		session->state = CONNECTION_STATE_NOT_CONNECTED;
 	}
 }
@@ -932,9 +946,9 @@ void asl_free_session(asl_session* session)
 {
 	if (session != NULL)
 	{
-		if (session->session != NULL)
+		if (session->wolfssl_session != NULL)
 		{
-			wolfSSL_free(session->session);
+			wolfSSL_free(session->wolfssl_session);
 		}
 
 		free(session);
@@ -947,9 +961,17 @@ void asl_free_endpoint(asl_endpoint* endpoint)
 {
 	if (endpoint != NULL)
 	{
-		if (endpoint->context != NULL)
+		/* Properly cleanup PKCS#11 stuff*/
+		if (endpoint->secure_element.initialized == true)
 		{
-			wolfSSL_CTX_free(endpoint->context);
+			wc_Pkcs11Token_Final(&endpoint->secure_element.token);
+			wc_Pkcs11_Finalize(&endpoint->secure_element.device);
+		}
+
+		/* Free the WolfSSL context */
+		if (endpoint->wolfssl_context != NULL)
+		{
+			wolfSSL_CTX_free(endpoint->wolfssl_context);
 		}
 
 		free(endpoint);
@@ -1006,13 +1028,13 @@ char const* asl_error_message(int error_code)
 /* Get the internal WolfSSL CTX object */
 WOLFSSL_CTX* asl_get_wolfssl_context(asl_endpoint* endpoint)
 {
-	return endpoint->context;
+	return endpoint->wolfssl_context;
 }
 
 /* Get the internal WolfSSL session object */
 WOLFSSL* asl_get_wolfssl_session(asl_session* session)
 {
-	return session->session;
+	return session->wolfssl_session;
 }
 
 #endif
