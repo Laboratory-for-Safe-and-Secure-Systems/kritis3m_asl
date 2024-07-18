@@ -385,6 +385,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
 				return ASL_ARGUMENT_ERROR;
 			}
 
+		#ifdef WOLFSSL_DUAL_ALG_CERTS
 			if (config->private_key.additional_key_buffer != NULL)
 			{
 				ret = pkcs11_import_pem_key(&endpoint->secure_element,
@@ -398,6 +399,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
 					return ASL_PKCS11_ERROR;
 				}
 			}
+		#endif
 		}
 
 		/* Use keys on the secure element (this also loads the id for the alt key) */
@@ -420,6 +422,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
 							config->private_key.size,
 							WOLFSSL_FILETYPE_PEM);
 
+	#ifdef WOLFSSL_DUAL_ALG_CERTS
 		/* Load the additional private key from the buffer */
 		if (config->private_key.additional_key_buffer != NULL)
 		{
@@ -431,6 +434,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
 					config->private_key.additional_key_size,
 					WOLFSSL_FILETYPE_PEM);
 		}
+	#endif
 
 		privateKeyLoaded = true;
 	}
@@ -537,6 +541,7 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 	        return NULL;
         }
 
+#ifdef WOLFSSL_DUAL_ALG_CERTS
 	/* Set the preference for verfication of hybrid signatures to be for both the
 	 * native and alternative chains.
 	 */
@@ -553,6 +558,7 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 		free(new_endpoint);
 	        return NULL;
         }
+#endif
 
         return new_endpoint;
 }
@@ -621,6 +627,7 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 	        return NULL;
         }
 
+#ifdef WOLFSSL_DUAL_ALG_CERTS
 	/* Set the preference for verfication of hybrid signatures to the user defined.
 	 */
         static uint8_t cks[] = {WOLFSSL_CKS_SIGSPEC_BOTH};
@@ -644,6 +651,7 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 		free(new_endpoint);
 	        return NULL;
         }
+#endif
 
         return new_endpoint;
 }
