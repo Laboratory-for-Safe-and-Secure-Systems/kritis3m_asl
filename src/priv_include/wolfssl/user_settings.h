@@ -11,7 +11,7 @@ extern "C" {
 #define WOLFSSL_USER_IO
 #define WOLF_CRYPTO_CB
 #define WOLF_CRYPTO_DEV
-#define WOLFSSL_KEY_GEN
+// #define WOLFSSL_KEY_GEN
 #define WOLFSSL_ALWAYS_VERIFY_CB
 #define HAVE_CRL_IO
 #define HAVE_TLS_EXTENSIONS
@@ -69,7 +69,7 @@ extern "C" {
 // #define WOLFSSL_DILITHIUM_SMALL
 // #define WOLFSSL_SMALL_STACK
 
-#define WOLFSSL_KEEP_DECODED_PRIVATE_KEY
+// #define WOLFSSL_KEEP_DECODED_PRIVATE_KEY
 
 #define NO_SHA
 #define NO_MD4

@@ -1050,3 +1050,13 @@ WOLFSSL* asl_get_wolfssl_session(asl_session* session)
 }
 
 #endif
+
+
+/* Cleanup any library resources */
+void asl_cleanup(void)
+{
+	/* Cleanup WolfSSL */
+	wolfSSL_Cleanup();
+
+	/* Nothing more to do at the moment... */
+}
