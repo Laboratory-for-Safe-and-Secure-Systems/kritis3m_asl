@@ -444,12 +444,12 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
 
 
 	/* Check if the private key and the device certificate match */
-	if (privateKeyLoaded == true)
-	{
-		ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
-		if (wolfssl_check_for_error(ret))
-			return ASL_INTERNAL_ERROR;
-	}
+	// if (privateKeyLoaded == true)
+	// {
+	// 	ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
+	// 	if (wolfssl_check_for_error(ret))
+	// 		return ASL_INTERNAL_ERROR;
+	// }
 
 	/* Configure the available curves for Key Exchange */
 	int wolfssl_key_exchange_curves[] = {
@@ -522,7 +522,8 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         int ret = wolfssl_configure_endpoint(new_endpoint, config);
         if (ret != ASL_SUCCESS)
         {
-                asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure new TLS server context");
+                asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure new TLS server context: %s (%d)",
+			asl_error_message(ret), ret);
                 wolfSSL_CTX_free(new_endpoint->wolfssl_context);
 		free(new_endpoint);
 	        return NULL;
@@ -604,7 +605,8 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         int ret = wolfssl_configure_endpoint(new_endpoint, config);
         if (ret != ASL_SUCCESS)
         {
-                asl_log(ASL_LOG_LEVEL_ERR, "Failed to confiugre new TLS client context\r\n");
+                asl_log(ASL_LOG_LEVEL_ERR, "Failed to confiugre new TLS client context: %s (%d)",
+			asl_error_message(ret), ret);
                 wolfSSL_CTX_free(new_endpoint->wolfssl_context);
 		free(new_endpoint);
 	        return NULL;
