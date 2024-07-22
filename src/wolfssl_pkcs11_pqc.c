@@ -154,10 +154,12 @@ int pkcs11_import_pem_key(asl_pkcs11_module* module, uint8_t const* pem_buffer, 
 		case ECDSAk:
 			wc_ecc_free(key);
 			break;
+	#if defined(HAVE_FALCON)
 		case FALCON_LEVEL1k:
 		case FALCON_LEVEL5k:
 			wc_falcon_free(key);
 			break;
+	#endif
 		case DILITHIUM_LEVEL2k:
 		case DILITHIUM_LEVEL3k:
 		case DILITHIUM_LEVEL5k:
@@ -251,6 +253,7 @@ dilithium_key* create_dilithium_key_from_buffer(int key_format, uint8_t const* d
 falcon_key* create_falcon_key_from_buffer(int key_format, uint8_t const* der_buffer,
 					  uint32_t der_size, uint8_t const* id, int len)
 {
+#if defined(HAVE_FALCON)
         /* Allocate new key */
 	falcon_key* key = (falcon_key*) malloc(sizeof(falcon_key));
 	if (key == NULL)
@@ -288,6 +291,15 @@ falcon_key* create_falcon_key_from_buffer(int key_format, uint8_t const* der_buf
 	}
 
 	return key;
+#else
+	(void) key_format;
+	(void) der_buffer;
+	(void) der_size;
+	(void) id;
+	(void) len;
+
+	return NULL;
+#endif /* HAVE_FALCON */
 }
 
 
