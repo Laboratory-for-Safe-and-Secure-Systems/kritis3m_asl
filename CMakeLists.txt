@@ -54,6 +54,14 @@ set(WOLFSSL_CRYPT_TESTS OFF)
 set(BUILD_SHARED_LIBS OFF)
 set(WOLFSSL_OQS OFF)
 set(WOLFSSL_BUILD_OUT_OF_TREE ON)
+if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64")
+        message(STATUS "Enabling Intel ASM optimizations for WolfSSL")
+        set(WOLFSSL_INTEL_ASM ON)
+elseif("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "aarch64|arm64")
+        message(STATUS "Enabling ARM ASM optimizations for WolfSSL")
+        set(WOLFSSL_ARM_ASM ON)
+endif()
+
 
 # Actually add the external repositories to our project
 FetchContent_GetProperties(liboqs)
