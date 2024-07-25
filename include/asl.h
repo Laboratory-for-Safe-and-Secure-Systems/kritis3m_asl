@@ -7,6 +7,11 @@
 
 #include "asl_config.h"
 
+
+#define PKCS11_LABEL_IDENTIFIER "pkcs11:"
+#define PKCS11_LABEL_IDENTIFIER_LEN 7
+
+
 /* Error types of the library */
 enum ASL_ERROR_CODES
 {
@@ -63,8 +68,6 @@ typedef struct
         bool no_encryption;
         enum asl_hybrid_signature_mode hybrid_signature_mode;
 
-        bool use_secure_element;
-        bool secure_element_import_keys;
         char const* secure_element_middleware_path;
 
         struct

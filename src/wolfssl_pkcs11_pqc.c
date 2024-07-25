@@ -10,51 +10,18 @@
 
 #define DEVICE_ID_SECURE_ELEMENT 1
 
-static char private_key_id[] = "ENTITY_KEY";
-static size_t private_key_id_size = sizeof(private_key_id) - 1;
-
-static char additional_private_key_id[] = "ENTITY_ALT_KEY";
-static size_t additional_private_key_id_size = sizeof(additional_private_key_id) - 1;
 
 
 #ifdef HAVE_PKCS11
 static dilithium_key* create_dilithium_key_from_buffer(int key_format, uint8_t const* der_buffer,
-						uint32_t der_size, uint8_t const* id, int len);
+                                                       uint32_t der_size, char const* label);
 static falcon_key* create_falcon_key_from_buffer(int key_format, uint8_t const* der_buffer,
-					  uint32_t der_size, uint8_t const* id, int len);
+                                                 uint32_t der_size, char const* label);
 static RsaKey* create_rsa_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size,
-				   uint8_t const* id, int len);
+                                          char const* label);
 static ecc_key* create_ecc_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size,
-				    uint8_t const* id, int len);
+                                           char const* label);
 #endif /* HAVE_PKCS11 */
-
-
-/* Get the id of the static private key */
-uint8_t const* secure_element_private_key_id(void)
-{
-        return (uint8_t const*) private_key_id;
-}
-
-
-/* Get the size of the id of the static private key */
-uint32_t secure_element_private_key_id_size(void)
-{
-        return private_key_id_size;
-}
-
-
-/* Get the id of the additional static private key */
-uint8_t const* secure_element_additional_private_key_id(void)
-{
-	return (uint8_t const*) additional_private_key_id;
-}
-
-
-/* Get the size of the id of the additional static private key */
-uint32_t secure_element_additional_private_key_id_size(void)
-{
-	return additional_private_key_id_size;
-}
 
 
 /* Get the device id of the secure element */
@@ -69,119 +36,119 @@ int secure_element_device_id(void)
  * Returns 0 on success, -1 in case of an error (error message is logged to the console).
  */
 int pkcs11_import_pem_key(asl_pkcs11_module* module, uint8_t const* pem_buffer, uint32_t pem_size,
-			  uint8_t const* id, int len)
+                          char const* label)
 {
 #ifdef HAVE_PKCS11
         DerBuffer* der = NULL;
-	EncryptedInfo info;
-	int keyFormat = 0;
-	int type = 0;
-	void* key = NULL;
-	int ret = 0;
-	uint32_t consumed = 0;
+        EncryptedInfo info;
+        int keyFormat = 0;
+        int type = 0;
+        void* key = NULL;
+        int ret = 0;
+        uint32_t consumed = 0;
 
-	memset(&info, 0, sizeof(EncryptedInfo));
+        memset(&info, 0, sizeof(EncryptedInfo));
 
-	/* As the PEM file may contain more than one private key in case of a hybrid certificate,
-	 * we have to parse the file in a loop. */
-	while ((consumed < pem_size) && (ret == 0))
-	{
-		/* Convert key to DER (binary) */
-		ret = PemToDer(pem_buffer + consumed, pem_size - consumed, PRIVATEKEY_TYPE, &der, NULL,
-			&info, &keyFormat);
-		if (ret < 0)
-		{
-			FreeDer(&der);
-			asl_log(ASL_LOG_LEVEL_ERR, "Error converting private key to DER");
-			return -1;
-		}
-		consumed += info.consumed;
+        /* As the PEM file may contain more than one private key in case of a hybrid certificate,
+         * we have to parse the file in a loop. */
+        while ((consumed < pem_size) && (ret == 0))
+        {
+                /* Convert key to DER (binary) */
+                ret = PemToDer(pem_buffer + consumed, pem_size - consumed, PRIVATEKEY_TYPE, &der, NULL,
+                        &info, &keyFormat);
+                if (ret < 0)
+                {
+                        FreeDer(&der);
+                        asl_log(ASL_LOG_LEVEL_ERR, "Error converting private key to DER");
+                        return -1;
+                }
+                consumed += info.consumed;
 
-		/* Check which key type we have */
-		if (keyFormat == RSAk)
-		{
-			/* Create the key object */
-			key = create_rsa_key_from_buffer(der->buffer, der->length, id, len);
+                /* Check which key type we have */
+                if (keyFormat == RSAk)
+                {
+                        /* Create the key object */
+                        key = create_rsa_key_from_buffer(der->buffer, der->length, label);
 
-			type = PKCS11_KEY_TYPE_RSA;
-		}
-		else if (keyFormat == ECDSAk)
-		{
-			/* Create the key object */
-			key = create_ecc_key_from_buffer(der->buffer, der->length, id, len);
+                        type = PKCS11_KEY_TYPE_RSA;
+                }
+                else if (keyFormat == ECDSAk)
+                {
+                        /* Create the key object */
+                        key = create_ecc_key_from_buffer(der->buffer, der->length, label);
 
-			type = PKCS11_KEY_TYPE_EC;
-		}
-		else if ((keyFormat == FALCON_LEVEL1k) || (keyFormat == FALCON_LEVEL5k))
-		{
-			/* Create the key object */
-			key = create_falcon_key_from_buffer(keyFormat, der->buffer, der->length,
-							id, len);
+                        type = PKCS11_KEY_TYPE_EC;
+                }
+                else if ((keyFormat == FALCON_LEVEL1k) || (keyFormat == FALCON_LEVEL5k))
+                {
+                        /* Create the key object */
+                        key = create_falcon_key_from_buffer(keyFormat, der->buffer, der->length,
+                                                            label);
 
-			type = PKCS11_KEY_TYPE_FALCON;
-		}
-		else if ((keyFormat == DILITHIUM_LEVEL2k) || (keyFormat == DILITHIUM_LEVEL3k) ||
-			(keyFormat == DILITHIUM_LEVEL5k))
-		{
-			/* Create the key object */
-			key = create_dilithium_key_from_buffer(keyFormat, der->buffer, der->length,
-							id, len);
+                        type = PKCS11_KEY_TYPE_FALCON;
+                }
+                else if ((keyFormat == DILITHIUM_LEVEL2k) || (keyFormat == DILITHIUM_LEVEL3k) ||
+                        (keyFormat == DILITHIUM_LEVEL5k))
+                {
+                        /* Create the key object */
+                        key = create_dilithium_key_from_buffer(keyFormat, der->buffer, der->length,
+                                                               label);
 
-			type = PKCS11_KEY_TYPE_DILITHIUM;
-		}
+                        type = PKCS11_KEY_TYPE_DILITHIUM;
+                }
 
-		if (key == NULL)
-		{
-			FreeDer(&der);
-			asl_log(ASL_LOG_LEVEL_ERR, "Error creating private key object");
-			return -1;
-		}
+                if (key == NULL)
+                {
+                        FreeDer(&der);
+                        asl_log(ASL_LOG_LEVEL_ERR, "Error creating private key object");
+                        return -1;
+                }
 
-		/* Import the key into the secure element */
-		ret = wc_Pkcs11StoreKey_ex(&module->token, type, 1, key, 1);
-		if (ret != 0)
-		{
-			asl_log(ASL_LOG_LEVEL_ERR, "Error importing private key into secure element: %d", ret);
-			ret = -1;
-		}
+                /* Import the key into the secure element */
+                ret = wc_Pkcs11StoreKey_ex(&module->token, type, 1, key, 1);
+                if (ret != 0)
+                {
+                        asl_log(ASL_LOG_LEVEL_ERR, "Error importing private key into secure element: %d", ret);
+                        ret = -1;
+                }
 
-		/* Free key */
-		switch (keyFormat)
-		{
-		case RSAk:
-			wc_FreeRsaKey(key);
-			break;
-		case ECDSAk:
-			wc_ecc_free(key);
-			break;
-	#if defined(HAVE_FALCON)
-		case FALCON_LEVEL1k:
-		case FALCON_LEVEL5k:
-			wc_falcon_free(key);
-			break;
-	#endif
-		case DILITHIUM_LEVEL2k:
-		case DILITHIUM_LEVEL3k:
-		case DILITHIUM_LEVEL5k:
-			wc_dilithium_free(key);
-			break;
-		}
-		free(key);
+                /* Free key */
+                switch (keyFormat)
+                {
+                case RSAk:
+                        wc_FreeRsaKey(key);
+                        break;
+                case ECDSAk:
+                        wc_ecc_free(key);
+                        break;
+        #if defined(HAVE_FALCON)
+                case FALCON_LEVEL1k:
+                case FALCON_LEVEL5k:
+                        wc_falcon_free(key);
+                        break;
+        #endif
+                case DILITHIUM_LEVEL2k:
+                case DILITHIUM_LEVEL3k:
+                case DILITHIUM_LEVEL5k:
+                        wc_dilithium_free(key);
+                        break;
+                }
+                free(key);
 
-		FreeDer(&der);
-	}
+                FreeDer(&der);
+        }
 
-	return ret;
+        return ret;
 #else
-	(void)module;
-	(void)pem_buffer;
-	(void)pem_size;
-	(void)id;
-	(void)len;
+        (void)module;
+        (void)pem_buffer;
+        (void)pem_size;
+        (void)id;
+        (void)len;
 
-	asl_log(ASL_LOG_LEVEL_ERR, "PKCS#11 support is not enabled");
+        asl_log(ASL_LOG_LEVEL_ERR, "PKCS#11 support is not enabled");
 
-	return -1;
+        return -1;
 #endif /* HAVE_PKCS11 */
 }
 
@@ -195,51 +162,51 @@ int pkcs11_import_pem_key(asl_pkcs11_module* module, uint8_t const* pem_buffer, 
  * logged to the console).
  */
 dilithium_key* create_dilithium_key_from_buffer(int key_format, uint8_t const* der_buffer,
-						uint32_t der_size, uint8_t const* id, int len)
+                                                uint32_t der_size, char const* label)
 {
-	word32 idx = 0;
+        word32 idx = 0;
 
-	/* Allocate new key */
-	dilithium_key* key = (dilithium_key*) malloc(sizeof(dilithium_key));
-	if (key == NULL)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
-		return NULL;
-	}
+        /* Allocate new key */
+        dilithium_key* key = (dilithium_key*) malloc(sizeof(dilithium_key));
+        if (key == NULL)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
+                return NULL;
+        }
 
-	int ret = wc_dilithium_init_id(key, id, len, NULL, INVALID_DEVID);
-	if (ret != 0)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
-		free(key);
-		return NULL;
-	}
+        int ret = wc_dilithium_init_label(key, label, NULL, INVALID_DEVID);
+        if (ret != 0)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
+                free(key);
+                return NULL;
+        }
 
-	/* Set level */
-	if (key_format == DILITHIUM_LEVEL2k)
-	{
-		wc_dilithium_set_level(key, 2);
-	}
-	else if (key_format == DILITHIUM_LEVEL3k)
-	{
-		wc_dilithium_set_level(key, 3);
-	}
-	else if (key_format == DILITHIUM_LEVEL5k)
-	{
-		wc_dilithium_set_level(key, 5);
-	}
+        /* Set level */
+        if (key_format == DILITHIUM_LEVEL2k)
+        {
+                wc_dilithium_set_level(key, 2);
+        }
+        else if (key_format == DILITHIUM_LEVEL3k)
+        {
+                wc_dilithium_set_level(key, 3);
+        }
+        else if (key_format == DILITHIUM_LEVEL5k)
+        {
+                wc_dilithium_set_level(key, 5);
+        }
 
-	/* Import the actual private key from the DER buffer */
-	ret = wc_Dilithium_PrivateKeyDecode(der_buffer, &idx, key, der_size);
-	if (ret != 0)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
-		wc_dilithium_free(key);
-		free(key);
-		return NULL;
-	}
+        /* Import the actual private key from the DER buffer */
+        ret = wc_Dilithium_PrivateKeyDecode(der_buffer, &idx, key, der_size);
+        if (ret != 0)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
+                wc_dilithium_free(key);
+                free(key);
+                return NULL;
+        }
 
-	return key;
+        return key;
 }
 
 
@@ -251,54 +218,54 @@ dilithium_key* create_dilithium_key_from_buffer(int key_format, uint8_t const* d
  * logged to the console).
  */
 falcon_key* create_falcon_key_from_buffer(int key_format, uint8_t const* der_buffer,
-					  uint32_t der_size, uint8_t const* id, int len)
+                                          uint32_t der_size, char const* label)
 {
 #if defined(HAVE_FALCON)
         /* Allocate new key */
-	falcon_key* key = (falcon_key*) malloc(sizeof(falcon_key));
-	if (key == NULL)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
-		return NULL;
-	}
+        falcon_key* key = (falcon_key*) malloc(sizeof(falcon_key));
+        if (key == NULL)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
+                return NULL;
+        }
 
-	int ret = wc_falcon_init_id(key, id, len, NULL, INVALID_DEVID);
-	if (ret != 0)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
-		free(key);
-		return NULL;
-	}
+        int ret = wc_falcon_init_label(key, label, NULL, INVALID_DEVID);
+        if (ret != 0)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
+                free(key);
+                return NULL;
+        }
 
-	/* Set level */
-	if (key_format == FALCON_LEVEL1k)
-	{
-		wc_falcon_set_level(key, 1);
-	}
-	else if (key_format == FALCON_LEVEL5k)
-	{
-		wc_falcon_set_level(key, 5);
-	}
+        /* Set level */
+        if (key_format == FALCON_LEVEL1k)
+        {
+                wc_falcon_set_level(key, 1);
+        }
+        else if (key_format == FALCON_LEVEL5k)
+        {
+                wc_falcon_set_level(key, 5);
+        }
 
-	/* Import the actual private key from the DER buffer */
-	ret = wc_falcon_import_private_key(der_buffer, der_size, NULL, 0, key);
-	if (ret != 0)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
-		wc_falcon_free(key);
-		free(key);
-		return NULL;
-	}
+        /* Import the actual private key from the DER buffer */
+        ret = wc_falcon_import_private_key(der_buffer, der_size, NULL, 0, key);
+        if (ret != 0)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
+                wc_falcon_free(key);
+                free(key);
+                return NULL;
+        }
 
-	return key;
+        return key;
 #else
-	(void) key_format;
-	(void) der_buffer;
-	(void) der_size;
-	(void) id;
-	(void) len;
+        (void) key_format;
+        (void) der_buffer;
+        (void) der_size;
+        (void) id;
+        (void) len;
 
-	return NULL;
+        return NULL;
 #endif /* HAVE_FALCON */
 }
 
@@ -310,36 +277,36 @@ falcon_key* create_falcon_key_from_buffer(int key_format, uint8_t const* der_buf
  * logged to the console).
  */
 RsaKey* create_rsa_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size,
-				   uint8_t const* id, int len)
+                                   char const* label)
 {
-	/* Allocate new key */
-	RsaKey* key = (RsaKey*) malloc(sizeof(RsaKey));
-	if (key == NULL)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
-		return NULL;
-	}
+        /* Allocate new key */
+        RsaKey* key = (RsaKey*) malloc(sizeof(RsaKey));
+        if (key == NULL)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
+                return NULL;
+        }
 
-	int ret = wc_InitRsaKey_Id(key, (uint8_t*)id, len, NULL, INVALID_DEVID);
-	if (ret != 0)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
-		free(key);
-		return NULL;
-	}
+        int ret = wc_InitRsaKey_Label(key, label, NULL, INVALID_DEVID);
+        if (ret != 0)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
+                free(key);
+                return NULL;
+        }
 
-	/* Import the actual private key from the DER buffer */
-	uint32_t index = 0;
-	ret = wc_RsaPrivateKeyDecode(der_buffer, &index, key, der_size);
-	if (ret != 0)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
-		wc_FreeRsaKey(key);
-		free(key);
-		return NULL;
-	}
+        /* Import the actual private key from the DER buffer */
+        uint32_t index = 0;
+        ret = wc_RsaPrivateKeyDecode(der_buffer, &index, key, der_size);
+        if (ret != 0)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
+                wc_FreeRsaKey(key);
+                free(key);
+                return NULL;
+        }
 
-	return key;
+        return key;
 }
 
 
@@ -350,36 +317,36 @@ RsaKey* create_rsa_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size,
  * logged to the console).
  */
 ecc_key* create_ecc_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size,
-				    uint8_t const* id, int len)
+                                    char const* label)
 {
-	/* Allocate new key */
-	ecc_key* key = (ecc_key*) malloc(sizeof(ecc_key));
-	if (key == NULL)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
-		return NULL;
-	}
+        /* Allocate new key */
+        ecc_key* key = (ecc_key*) malloc(sizeof(ecc_key));
+        if (key == NULL)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error allocating temporary private key");
+                return NULL;
+        }
 
-	int ret = wc_ecc_init_id(key, (uint8_t*)id, len, NULL, INVALID_DEVID);
-	if (ret != 0)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
-		free(key);
-		return NULL;
-	}
+        int ret = wc_ecc_init_label(key, label, NULL, INVALID_DEVID);
+        if (ret != 0)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error creating new key: %d", ret);
+                free(key);
+                return NULL;
+        }
 
-	/* Import the actual private key from the DER buffer */
-	uint32_t index = 0;
-	ret = wc_EccPrivateKeyDecode(der_buffer, &index, key, der_size);
-	if (ret != 0)
-	{
-		asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
-		wc_ecc_free(key);
-		free(key);
-		return NULL;
-	}
+        /* Import the actual private key from the DER buffer */
+        uint32_t index = 0;
+        ret = wc_EccPrivateKeyDecode(der_buffer, &index, key, der_size);
+        if (ret != 0)
+        {
+                asl_log(ASL_LOG_LEVEL_ERR, "Error parsing the DER key: %d", ret);
+                wc_ecc_free(key);
+                free(key);
+                return NULL;
+        }
 
-	return key;
+        return key;
 }
 #endif /* HAVE_PKCS11 */
 
@@ -392,135 +359,135 @@ ecc_key* create_ecc_key_from_buffer(uint8_t const* der_buffer, uint32_t der_size
 
 I2C_RV setupI2C(i2cParameters *params)
 {
-	const struct device* const dev = DEVICE_DT_GET(DT_NODELABEL(i2c1));
+        const struct device* const dev = DEVICE_DT_GET(DT_NODELABEL(i2c1));
 
-	// printk("main : setupI2C\n");
+        // printk("main : setupI2C\n");
 
-	if (!device_is_ready(dev))
-	{
-		printk("%s: device not ready.\n", dev->name);
-		return I2C_E_CONFIG_ERROR;
-	}
-	// else
-	// {
-	// 	printk("%s: device ready.\n", dev->name);
-	// }
+        if (!device_is_ready(dev))
+        {
+                printk("%s: device not ready.\n", dev->name);
+                return I2C_E_CONFIG_ERROR;
+        }
+        // else
+        // {
+        // 	printk("%s: device ready.\n", dev->name);
+        // }
 
-	/* configure i2c */
-	uint32_t i2c_cfg = I2C_SPEED_SET(I2C_SPEED_FAST) | I2C_MODE_CONTROLLER;
-	if (i2c_configure(dev, i2c_cfg))
-	{
-		printk("i2c config failed.\n");
-		return I2C_E_CONFIG_ERROR;
-	}
-	else
-	{
-		printk("%s: device configured.\n", dev->name);
-	}
+        /* configure i2c */
+        uint32_t i2c_cfg = I2C_SPEED_SET(I2C_SPEED_FAST) | I2C_MODE_CONTROLLER;
+        if (i2c_configure(dev, i2c_cfg))
+        {
+                printk("i2c config failed.\n");
+                return I2C_E_CONFIG_ERROR;
+        }
+        else
+        {
+                printk("%s: device configured.\n", dev->name);
+        }
 
-	params->address = 0x38;
+        params->address = 0x38;
 
-	// printk("main : setupI2C ... done.\n");
+        // printk("main : setupI2C ... done.\n");
 
-	return I2C_S_SUCCESS;
+        return I2C_S_SUCCESS;
 }
 
 
 I2C_RV I2C_RW(void *context, unsigned char *packet, int packetLength, unsigned char *response, int *responseLength)
 {
-	const struct device* const dev = DEVICE_DT_GET(DT_NODELABEL(i2c1));
-	i2cParameters* params = (i2cParameters*) context;
+        const struct device* const dev = DEVICE_DT_GET(DT_NODELABEL(i2c1));
+        i2cParameters* params = (i2cParameters*) context;
 
-	// printk("main : I2C_RW\n");
+        // printk("main : I2C_RW\n");
 
-	uint8_t *rpdu = response;
-	int pos = 0;
+        uint8_t *rpdu = response;
+        int pos = 0;
 
-	int ret = 0;
-	int counter = 100;
+        int ret = 0;
+        int counter = 100;
 
-	int readLen = 0;
+        int readLen = 0;
 
-	uint8_t lrc = 0;
-	uint8_t lrcExpected = 0;
+        uint8_t lrc = 0;
+        uint8_t lrcExpected = 0;
 
-	// calculateLrcI2C(apdu, sizeof(apdu), 0x01);
+        // calculateLrcI2C(apdu, sizeof(apdu), 0x01);
 
-	// printk("Write\n");
-	// for (int i = 0; i < packetLength; i++)
-	// {
-	// 	printk("%02X ", packet[i]);
-	// }
-	// printk("\n");
+        // printk("Write\n");
+        // for (int i = 0; i < packetLength; i++)
+        // {
+        // 	printk("%02X ", packet[i]);
+        // }
+        // printk("\n");
 
-	if (i2c_write(dev, packet, packetLength, params->address))
-	{
-		printk("i2c write failed.\n");
-		return I2C_E_RW_ERROR;
-	}
+        if (i2c_write(dev, packet, packetLength, params->address))
+        {
+                printk("i2c write failed.\n");
+                return I2C_E_RW_ERROR;
+        }
 
-	// k_msleep(200);
+        // k_msleep(200);
 
-	while (*rpdu == 0xFF)
-	{
-		/* read data */
-		if (i2c_read(dev, &(rpdu[pos]), 1, params->address))
-		{
-			printk("i2c read failed.\n");
-		}
-		counter--;
-		// printk("Wait.\n");
-		k_msleep(100);
+        while (*rpdu == 0xFF)
+        {
+                /* read data */
+                if (i2c_read(dev, &(rpdu[pos]), 1, params->address))
+                {
+                        printk("i2c read failed.\n");
+                }
+                counter--;
+                // printk("Wait.\n");
+                k_msleep(100);
 
-		if (counter == 0)
-		{
-			printk("Timeout.\n");
-			return I2C_E_RW_ERROR;
-		}
-	}
+                if (counter == 0)
+                {
+                        printk("Timeout.\n");
+                        return I2C_E_RW_ERROR;
+                }
+        }
 
-	pos++;
+        pos++;
 
-	if (i2c_read(dev, &(rpdu[pos]), 1, params->address))
-	{
-		printk("i2c read failed.\n");
-	}
+        if (i2c_read(dev, &(rpdu[pos]), 1, params->address))
+        {
+                printk("i2c read failed.\n");
+        }
 
-	readLen = (rpdu[0] << 8) + rpdu[1];
+        readLen = (rpdu[0] << 8) + rpdu[1];
 
-	pos++;
+        pos++;
 
-	// printk("Len: %d\n", readLen);
+        // printk("Len: %d\n", readLen);
 
-	/* read data */
-	while ((ret = i2c_read(dev, &(rpdu[pos++]), 1, params->address)) == 0)
-	{
-		if (pos == readLen + 2)
-			break;
-	}
+        /* read data */
+        while ((ret = i2c_read(dev, &(rpdu[pos++]), 1, params->address)) == 0)
+        {
+                if (pos == readLen + 2)
+                        break;
+        }
 
-	// lrc
-	if (i2c_read(dev, &(rpdu[pos++]), 1, params->address))
-	{
-		printk("i2c read failed.\n");
-	}
+        // lrc
+        if (i2c_read(dev, &(rpdu[pos++]), 1, params->address))
+        {
+                printk("i2c read failed.\n");
+        }
 
-	lrc = rpdu[pos - 1];
-	// NOTE: function check from 0 to len-1
-	lrcExpected = calculateLrcI2C(rpdu, pos, 0x00);
+        lrc = rpdu[pos - 1];
+        // NOTE: function check from 0 to len-1
+        lrcExpected = calculateLrcI2C(rpdu, pos, 0x00);
 
-	// printk("LRC: %02X, Expected: %02X CHK: %s\n", lrc, lrcExpected, ((lrc == lrcExpected) ? "OK" : "FAIL"));
+        // printk("LRC: %02X, Expected: %02X CHK: %s\n", lrc, lrcExpected, ((lrc == lrcExpected) ? "OK" : "FAIL"));
 
-	// printk("Read\n");
-	// for (int i = 2; i < readLen + 2; i++)
-	// {
-	// 	printk("%02X ", rpdu[i]);
-	// }
-	// printk("\n");
+        // printk("Read\n");
+        // for (int i = 2; i < readLen + 2; i++)
+        // {
+        // 	printk("%02X ", rpdu[i]);
+        // }
+        // printk("\n");
 
-	*responseLength = pos;
+        *responseLength = pos;
 
-	return I2C_S_SUCCESS;
+        return I2C_S_SUCCESS;
 }
 
 #endif /* __ZEPHYR__ && CONFIG_SECURE_ELEMENT_SUPPORT */
