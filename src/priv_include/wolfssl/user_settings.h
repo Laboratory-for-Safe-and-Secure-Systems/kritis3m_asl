@@ -71,7 +71,7 @@ extern "C" {
 
 // #define WOLFSSL_KEEP_DECODED_PRIVATE_KEY
 
-#define NO_SHA
+// #define NO_SHA
 #define NO_MD4
 #define NO_MD5
 #define NO_DES3
