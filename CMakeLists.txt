@@ -110,14 +110,6 @@ target_include_directories(asl PRIVATE
 target_link_libraries(asl PRIVATE wolfssl)
 
 
-# Add PKCS11 related stuff
-if(KRITIS3M_ASL_ENABLE_PKCS11)
-        target_sources(asl PRIVATE
-                ${CMAKE_CURRENT_SOURCE_DIR}/src/wolfssl_pkcs11_pqc.c
-        )
-endif()
-
-
 # Create combined static library that includes all dependencies
 set(LIBNAME "libkritis3m_asl.a")
 

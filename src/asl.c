@@ -3,8 +3,6 @@
 #include <errno.h>
 #include <sys/socket.h>
 
-#include "secure_element/wolfssl_pkcs11_pqc.h"
-
 #include "asl.h"
 #include "asl_logging.h"
 
@@ -33,6 +31,20 @@ enum connection_state
         CONNECTION_STATE_HANDSHAKE,
         CONNECTION_STATE_CONNECTED,
 };
+
+
+/* PKCS#11 support */
+#define DEVICE_ID_SECURE_ELEMENT 1
+
+typedef struct
+{
+#ifdef HAVE_PKCS11
+	Pkcs11Dev device;
+	Pkcs11Token token;
+#endif
+	bool initialized;
+}
+asl_pkcs11_module;
 
 
 /* Data structure for an endpoint */
@@ -279,7 +291,7 @@ static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path)
                 }
 
                 /* Register the device with WolfSSL */
-                ret = wc_CryptoCb_RegisterDevice(secure_element_device_id(),
+                ret = wc_CryptoCb_RegisterDevice(DEVICE_ID_SECURE_ELEMENT,
                                                  wc_Pkcs11_CryptoDevCb,
                                                  &module->token);
                 if (ret != 0)
@@ -363,7 +375,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                                 return ASL_PKCS11_ERROR;
                         }
 
-                        // wolfSSL_CTX_SetDevId(context, secure_element_device_id());
+                        // wolfSSL_CTX_SetDevId(context, DEVICE_ID_SECURE_ELEMENT);
 
                         asl_log(ASL_LOG_LEVEL_DBG, "Using external private key with label \"%s\"",
                                 (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN);
@@ -371,7 +383,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         /* Use keys on the secure element (this also loads the label for the alt key) */
                         ret = wolfSSL_CTX_use_PrivateKey_Label(endpoint->wolfssl_context,
                                                                (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN,
-                                                               secure_element_device_id());
+                                                               DEVICE_ID_SECURE_ELEMENT);
 
                         privateKeyLoaded = true;
                 #else
@@ -414,7 +426,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         /* Use keys on the secure element (this also loads the label for the alt key) */
                         ret = wolfSSL_CTX_use_AltPrivateKey_Label(endpoint->wolfssl_context,
                                         (char const*) config->private_key.additional_key_buffer + PKCS11_LABEL_IDENTIFIER_LEN,
-                                        secure_element_device_id());
+                                        DEVICE_ID_SECURE_ELEMENT);
                 #else
                         asl_log(ASL_LOG_LEVEL_ERR, "Secure element support is not compiled in, please compile with support enabled");
                         return ASL_PKCS11_ERROR;
