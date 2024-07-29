@@ -375,7 +375,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                                 return ASL_PKCS11_ERROR;
                         }
 
-                        // wolfSSL_CTX_SetDevId(context, DEVICE_ID_SECURE_ELEMENT);
+                        // wolfSSL_CTX_SetDevId(endpoint->wolfssl_context, DEVICE_ID_SECURE_ELEMENT);
 
                         asl_log(ASL_LOG_LEVEL_DBG, "Using external private key with label \"%s\"",
                                 (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN);
