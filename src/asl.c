@@ -268,8 +268,13 @@ static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path)
 {
         int ret = 0;
 
+        if ((module == NULL) || (path == NULL))
+        {
+                return ASL_ARGUMENT_ERROR;
+        }
+
         /* Load the secure element middleware */
-        if ((module != NULL) && (path != NULL) && (module->initialized == false))
+        if (module->initialized == false)
         {
                 asl_log(ASL_LOG_LEVEL_INF, "Initializing secure element");
 
@@ -317,11 +322,6 @@ static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path)
                         asl_log(ASL_LOG_LEVEL_ERR, "Secure element initialization failed: %d", ret);
                         return ASL_PKCS11_ERROR;
                 }
-        }
-        else
-        {
-                module->initialized = false;
-                ret = 1;
         }
 
         return ret;
