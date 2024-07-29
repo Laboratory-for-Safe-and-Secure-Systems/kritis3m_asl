@@ -454,21 +454,6 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         		return ASL_INTERNAL_ERROR;
         }
 
-        /* Configure the available curves for Key Exchange */
-        int wolfssl_key_exchange_curves[] = {
-                WOLFSSL_ECC_SECP384R1,
-                // WOLFSSL_KYBER_LEVEL1,
-                WOLFSSL_KYBER_LEVEL3,
-                WOLFSSL_KYBER_LEVEL5,
-                // WOLFSSL_P256_KYBER_LEVEL1,
-                WOLFSSL_P384_KYBER_LEVEL3,
-                WOLFSSL_P521_KYBER_LEVEL5,
-        };
-        ret = wolfSSL_CTX_set_groups(endpoint->wolfssl_context, wolfssl_key_exchange_curves,
-                                     sizeof(wolfssl_key_exchange_curves) / sizeof(int));
-        if (wolfssl_check_for_error(ret))
-                return ASL_INTERNAL_ERROR;
-
         /* Set the IO callbacks for send and receive */
         wolfSSL_CTX_SetIORecv(endpoint->wolfssl_context, wolfssl_read_callback);
         wolfSSL_CTX_SetIOSend(endpoint->wolfssl_context, wolfssl_write_callback);
@@ -527,6 +512,28 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         {
                 asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure new TLS server context: %s (%d)",
                         asl_error_message(ret), ret);
+                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
+                free(new_endpoint);
+                return NULL;
+        }
+
+        /* Configure the available curves for Key Exchange. For the server, all are allowed to
+         * support various clients. */
+        int wolfssl_key_exchange_curves[] = {
+                WOLFSSL_ECC_SECP256R1,
+                WOLFSSL_ECC_SECP384R1,
+                WOLFSSL_ECC_SECP521R1,
+                WOLFSSL_KYBER_LEVEL1,
+                WOLFSSL_KYBER_LEVEL3,
+                WOLFSSL_KYBER_LEVEL5,
+                WOLFSSL_P256_KYBER_LEVEL1,
+                WOLFSSL_P384_KYBER_LEVEL3,
+                WOLFSSL_P521_KYBER_LEVEL5,
+        };
+        ret = wolfSSL_CTX_set_groups(new_endpoint->wolfssl_context, wolfssl_key_exchange_curves,
+                                     sizeof(wolfssl_key_exchange_curves) / sizeof(int));
+        if (wolfssl_check_for_error(ret))
+        {
                 wolfSSL_CTX_free(new_endpoint->wolfssl_context);
                 free(new_endpoint);
                 return NULL;
@@ -615,6 +622,53 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
                 return NULL;
         }
 
+        /* Configure the curve for Key Exchange. For the client, we allowd only the one we want
+         * to select (as the key share in the ClientHello is directly derived from it). If no
+         * user supplied value is present, we select the hybrid level 3 one. */
+        int wolfssl_key_exchange_curve = WOLFSSL_P384_KYBER_LEVEL3;
+        if (config->key_exchange_method != ASL_KEX_DEFAULT)
+        {
+                switch (config->key_exchange_method)
+                {
+                        case ASL_KEX_CLASSIC_ECDHE_256:
+                                wolfssl_key_exchange_curve = WOLFSSL_ECC_SECP256R1;
+                                break;
+                        case ASL_KEX_CLASSIC_ECDHE_384:
+                                wolfssl_key_exchange_curve = WOLFSSL_ECC_SECP384R1;
+                                break;
+                        case ASL_KEX_CLASSIC_ECDHE_521:
+                                wolfssl_key_exchange_curve = WOLFSSL_ECC_SECP521R1;
+                                break;
+                        case ASL_KEX_PQC_MLKEM_512:
+                                wolfssl_key_exchange_curve = WOLFSSL_KYBER_LEVEL1;
+                                break;
+                        case ASL_KEX_PQC_MLKEM_768:
+                                wolfssl_key_exchange_curve = WOLFSSL_KYBER_LEVEL3;
+                                break;
+                        case ASL_KEX_PQC_MLKEM_1024:
+                                wolfssl_key_exchange_curve = WOLFSSL_KYBER_LEVEL5;
+                                break;
+                        case ASL_KEX_HYBRID_ECDHE_256_MLKEM_512:
+                                wolfssl_key_exchange_curve = WOLFSSL_P256_KYBER_LEVEL1;
+                                break;
+                        case ASL_KEX_HYBRID_ECDHE_521_MLKEM_1024:
+                                wolfssl_key_exchange_curve = WOLFSSL_P521_KYBER_LEVEL5;
+                                break;
+                        case ASL_KEX_HYBRID_ECDHE_384_MLKEM_768: /* Order change for default! */
+                        default:
+                                wolfssl_key_exchange_curve = WOLFSSL_P384_KYBER_LEVEL3;
+                                break;
+
+                }
+        }
+        ret = wolfSSL_CTX_set_groups(new_endpoint->wolfssl_context, &wolfssl_key_exchange_curve, 1);
+        if (wolfssl_check_for_error(ret))
+        {
+                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
+                free(new_endpoint);
+                return NULL;
+        }
+
         /* Configure the available cipher suites for TLS 1.3
          * We only support AES GCM with 256 bit key length and the
          * integrity only cipher with SHA384.
@@ -633,22 +687,25 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         }
 
 #ifdef WOLFSSL_DUAL_ALG_CERTS
-        /* Set the preference for verfication of hybrid signatures to the user defined.
-         */
+        /* Set the preference for verfication of hybrid signatures. If the user has not
+         * specified a preference, we default to BOTH. */
         static uint8_t cks[] = {WOLFSSL_CKS_SIGSPEC_BOTH};
-        switch (config->hybrid_signature_mode)
+        if (config->hybrid_signature_mode != ASL_HYBRID_SIGNATURE_MODE_DEFAULT)
         {
-                case HYBRID_SIGNATURE_MODE_NATIVE:
-                        cks[0] = WOLFSSL_CKS_SIGSPEC_NATIVE;
-                        break;
-                case HYBRID_SIGNATURE_MODE_ALTERNATIVE:
-                        cks[0] = WOLFSSL_CKS_SIGSPEC_ALTERNATIVE;
-                        break;
-                case HYBRID_SIGNATURE_MODE_BOTH:
-                default:
-                        cks[0] = WOLFSSL_CKS_SIGSPEC_BOTH;
-                        break;
-        };
+                switch (config->hybrid_signature_mode)
+                {
+                        case ASL_HYBRID_SIGNATURE_MODE_NATIVE:
+                                cks[0] = WOLFSSL_CKS_SIGSPEC_NATIVE;
+                                break;
+                        case ASL_HYBRID_SIGNATURE_MODE_ALTERNATIVE:
+                                cks[0] = WOLFSSL_CKS_SIGSPEC_ALTERNATIVE;
+                                break;
+                        case ASL_HYBRID_SIGNATURE_MODE_BOTH:
+                        default:
+                                cks[0] = WOLFSSL_CKS_SIGSPEC_BOTH;
+                                break;
+                };
+        }
         ret = wolfSSL_CTX_UseCKS(new_endpoint->wolfssl_context, cks, sizeof(cks));
         if (wolfssl_check_for_error(ret))
         {

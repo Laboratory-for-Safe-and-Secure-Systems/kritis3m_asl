@@ -51,13 +51,31 @@ typedef struct
 asl_configuration;
 
 
+/* Enum for the different key exchange (KEX) methods
+ * to be used during the handshake. */
+enum asl_key_exchange_method
+{
+        ASL_KEX_DEFAULT = 0,
+        ASL_KEX_CLASSIC_ECDHE_256,
+        ASL_KEX_CLASSIC_ECDHE_384,
+        ASL_KEX_CLASSIC_ECDHE_521,
+        ASL_KEX_PQC_MLKEM_512,
+        ASL_KEX_PQC_MLKEM_768,
+        ASL_KEX_PQC_MLKEM_1024,
+        ASL_KEX_HYBRID_ECDHE_256_MLKEM_512,
+        ASL_KEX_HYBRID_ECDHE_384_MLKEM_768,
+        ASL_KEX_HYBRID_ECDHE_521_MLKEM_1024,
+};
+
+
 /* Enum for the different modes during the handshake
  * regarding hybrid signatures. */
 enum asl_hybrid_signature_mode
 {
-        HYBRID_SIGNATURE_MODE_NATIVE = 1,
-        HYBRID_SIGNATURE_MODE_ALTERNATIVE = 2,
-        HYBRID_SIGNATURE_MODE_BOTH = 3
+        ASL_HYBRID_SIGNATURE_MODE_DEFAULT = 0,
+        ASL_HYBRID_SIGNATURE_MODE_NATIVE,
+        ASL_HYBRID_SIGNATURE_MODE_ALTERNATIVE,
+        ASL_HYBRID_SIGNATURE_MODE_BOTH,
 };
 
 
@@ -67,6 +85,7 @@ typedef struct
         bool mutual_authentication;
         bool no_encryption;
         enum asl_hybrid_signature_mode hybrid_signature_mode;
+        enum asl_key_exchange_method key_exchange_method;
 
         char const* secure_element_middleware_path;
 
