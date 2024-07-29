@@ -23,6 +23,7 @@ extern "C" {
 #define WOLFSSL_DUAL_ALG_CERTS
 #define WOLFSSL_ASN_TEMPLATE
 #define LARGE_STATIC_BUFFERS
+#define WOLFSSL_ALT_NAMES
 
 #define NO_PWDBASED
 #define NO_WRITEV
