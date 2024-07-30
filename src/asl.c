@@ -54,7 +54,7 @@ struct asl_endpoint
         asl_pkcs11_module secure_element;
 
 #if defined(HAVE_SECRET_CALLBACK)
-        char const* keylog_file;
+        char* keylog_file;
 #endif
 };
 
@@ -493,8 +493,23 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         }
 
         new_endpoint->secure_element.initialized = false;
+
 #if defined(HAVE_SECRET_CALLBACK)
-        new_endpoint->keylog_file = config->keylog_file;
+        if (config->keylog_file != NULL)
+        {
+                new_endpoint->keylog_file = (char*) malloc(strlen(config->keylog_file) + 1);
+                if (new_endpoint->keylog_file == NULL)
+                {
+                        asl_log(ASL_LOG_LEVEL_ERR, "Unable to allocate memory for keylog file name");
+                        free(new_endpoint);
+                        return NULL;
+                }
+                strcpy(new_endpoint->keylog_file, config->keylog_file);
+        }
+        else
+        {
+                new_endpoint->keylog_file = NULL;
+        }
 #endif
 
         /* Create the TLS server context */
@@ -598,8 +613,23 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         }
 
         new_endpoint->secure_element.initialized = false;
+
 #if defined(HAVE_SECRET_CALLBACK)
-        new_endpoint->keylog_file = config->keylog_file;
+        if (config->keylog_file != NULL)
+        {
+                new_endpoint->keylog_file = (char*) malloc(strlen(config->keylog_file) + 1);
+                if (new_endpoint->keylog_file == NULL)
+                {
+                        asl_log(ASL_LOG_LEVEL_ERR, "Unable to allocate memory for keylog file name");
+                        free(new_endpoint);
+                        return NULL;
+                }
+                strcpy(new_endpoint->keylog_file, config->keylog_file);
+        }
+        else
+        {
+                new_endpoint->keylog_file = NULL;
+        }
 #endif
 
         /* Create the TLS client context */
@@ -1055,6 +1085,13 @@ void asl_free_endpoint(asl_endpoint* endpoint)
                 {
                         wolfSSL_CTX_free(endpoint->wolfssl_context);
                 }
+
+        #if defined(HAVE_SECRET_CALLBACK)
+                if (endpoint->keylog_file != NULL)
+                {
+                        free(endpoint->keylog_file);
+                }
+        #endif
 
                 free(endpoint);
         }
