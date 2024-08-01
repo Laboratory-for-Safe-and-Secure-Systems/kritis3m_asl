@@ -538,12 +538,19 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
                 WOLFSSL_ECC_SECP256R1,
                 WOLFSSL_ECC_SECP384R1,
                 WOLFSSL_ECC_SECP521R1,
+                WOLFSSL_ECC_X25519,
+                WOLFSSL_ECC_X448,
                 WOLFSSL_KYBER_LEVEL1,
                 WOLFSSL_KYBER_LEVEL3,
                 WOLFSSL_KYBER_LEVEL5,
                 WOLFSSL_P256_KYBER_LEVEL1,
                 WOLFSSL_P384_KYBER_LEVEL3,
                 WOLFSSL_P521_KYBER_LEVEL5,
+                WOLFSSL_P384_KYBER_LEVEL5,
+                WOLFSSL_X25519_KYBER_LEVEL1,
+                WOLFSSL_X448_KYBER_LEVEL3,
+                WOLFSSL_X25519_KYBER_LEVEL3,
+                WOLFSSL_P256_KYBER_LEVEL3,
         };
         ret = wolfSSL_CTX_set_groups(new_endpoint->wolfssl_context, wolfssl_key_exchange_curves,
                                      sizeof(wolfssl_key_exchange_curves) / sizeof(int));
@@ -660,31 +667,52 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         {
                 switch (config->key_exchange_method)
                 {
-                        case ASL_KEX_CLASSIC_ECDHE_256:
+                        case ASL_KEX_CLASSIC_SECP256:
                                 wolfssl_key_exchange_curve = WOLFSSL_ECC_SECP256R1;
                                 break;
-                        case ASL_KEX_CLASSIC_ECDHE_384:
+                        case ASL_KEX_CLASSIC_SECP384:
                                 wolfssl_key_exchange_curve = WOLFSSL_ECC_SECP384R1;
                                 break;
-                        case ASL_KEX_CLASSIC_ECDHE_521:
+                        case ASL_KEX_CLASSIC_SECP521:
                                 wolfssl_key_exchange_curve = WOLFSSL_ECC_SECP521R1;
                                 break;
-                        case ASL_KEX_PQC_MLKEM_512:
+                        case ASL_KEX_CLASSIC_X25519:
+                                wolfssl_key_exchange_curve = WOLFSSL_ECC_X25519;
+                                break;
+                        case ASL_KEX_CLASSIC_X448:
+                                wolfssl_key_exchange_curve = WOLFSSL_ECC_X448;
+                                break;
+                        case ASL_KEX_PQC_MLKEM512:
                                 wolfssl_key_exchange_curve = WOLFSSL_KYBER_LEVEL1;
                                 break;
-                        case ASL_KEX_PQC_MLKEM_768:
+                        case ASL_KEX_PQC_MLKEM768:
                                 wolfssl_key_exchange_curve = WOLFSSL_KYBER_LEVEL3;
                                 break;
-                        case ASL_KEX_PQC_MLKEM_1024:
+                        case ASL_KEX_PQC_MLKEM1024:
                                 wolfssl_key_exchange_curve = WOLFSSL_KYBER_LEVEL5;
                                 break;
-                        case ASL_KEX_HYBRID_ECDHE_256_MLKEM_512:
+                        case ASL_KEX_HYBRID_SECP256_MLKEM512:
                                 wolfssl_key_exchange_curve = WOLFSSL_P256_KYBER_LEVEL1;
                                 break;
-                        case ASL_KEX_HYBRID_ECDHE_521_MLKEM_1024:
+                        case ASL_KEX_HYBRID_SECP256_MLKEM768:
+                                wolfssl_key_exchange_curve = WOLFSSL_P256_KYBER_LEVEL3;
+                                break;
+                        case ASL_KEX_HYBRID_SECP521_MLKEM1024:
                                 wolfssl_key_exchange_curve = WOLFSSL_P521_KYBER_LEVEL5;
                                 break;
-                        case ASL_KEX_HYBRID_ECDHE_384_MLKEM_768: /* Order change for default! */
+                        case ASL_KEX_HYBRID_SECP384_MLKEM1024:
+                                wolfssl_key_exchange_curve = WOLFSSL_P384_KYBER_LEVEL5;
+                                break;
+                        case ASL_KEX_HYBRID_X25519_MLKEM512:
+                                wolfssl_key_exchange_curve = WOLFSSL_X25519_KYBER_LEVEL1;
+                                break;
+                        case ASL_KEX_HYBRID_X448_MLKEM768:
+                                wolfssl_key_exchange_curve = WOLFSSL_X448_KYBER_LEVEL3;
+                                break;
+                        case ASL_KEX_HYBRID_X25519_MLKEM768:
+                                wolfssl_key_exchange_curve = WOLFSSL_X25519_KYBER_LEVEL3;
+                                break;
+                        case ASL_KEX_HYBRID_SECP384_MLKEM768: /* Order change for default! */
                         default:
                                 wolfssl_key_exchange_curve = WOLFSSL_P384_KYBER_LEVEL3;
                                 break;

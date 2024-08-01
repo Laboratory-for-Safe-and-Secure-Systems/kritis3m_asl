@@ -46,6 +46,8 @@ extern "C" {
 #define HAVE_ECC384
 #define ECC_SHAMIR
 #define ECC_TIMING_RESISTANT
+#define HAVE_CURVE25519
+#define HAVE_CURVE448
 #define WC_RSA_PSS
 #define WC_RSA_BLINDING
 #define WOLFSSL_SHA384
