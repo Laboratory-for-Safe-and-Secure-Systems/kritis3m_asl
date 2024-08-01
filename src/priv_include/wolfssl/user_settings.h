@@ -107,6 +107,7 @@ extern "C" {
 
 #define WOLFSSL_SP_X86_64
 #define WOLFSSL_SP_X86_64_ASM
+#define USE_INTEL_SPEEDUP
 
 #elif defined(__aarch64__)
 
