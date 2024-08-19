@@ -6,7 +6,7 @@
 #include "asl.h"
 #include "asl_logging.h"
 
-#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/options.h"
 #include "wolfssl/ssl.h"
 #include "wolfssl/wolfcrypt/cryptocb.h"
 #include "wolfssl/wolfcrypt/memory.h"

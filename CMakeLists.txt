@@ -1,91 +1,63 @@
 cmake_minimum_required(VERSION 3.22)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(kritis3m_asl)
 
-# Make sure VSCode and IntelliSense finds its necessary data
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Options
 
+# Select between shared or static libraries
+option(BUILD_SHARED_LIBS "Build shared libraries (.so) instead of static ones (.a)" ON)
+
+# When this option is enabled, the KRITIS3M_wolfssl dependency will be built as standalone
+# library to be installed system-wide. When disabled, the library will be built as a library
+# only to be linked against a wrapping application.
+option(KRITIS3M_ASL_STANDALONE "Use standalone WolfSSL" ON)
+
+# Use an externally installed WolfSSL library. If disabled, WolfSSL will be built.
+option(KRITIS3M_ASL_EXTERNAL_WOLFSSL "Use external WolfSSL library" OFF)
+
+# Enable PKCS11 support in WolfSSL
 option(KRITIS3M_ASL_ENABLE_PKCS11 "Enable PKCS11 support" ON)
+
+# Enable direct access to the WolfSSL API
 option(KRITIS3M_ASL_INTERNAL_API "Enable access to internal WolfSSL API" OFF)
 
 
-include(FetchContent)
-Set(FETCHCONTENT_QUIET FALSE)
+if(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
+
+# Search for system-wide installed WolfSSL
+find_package(liboqs REQUIRED)
+find_package(wolfssl REQUIRED)
+
+else(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
 
 # External repositories we need
-FetchContent_Declare(liboqs
-    GIT_REPOSITORY          https://github.com/open-quantum-safe/liboqs.git
-    GIT_TAG                 origin/main
-    GIT_PROGRESS            TRUE
-    USES_TERMINAL_DOWNLOAD  TRUE
+include(FetchContent)
+Set(FETCHCONTENT_QUIET FALSE)
+FetchContent_Declare(kritis3m_wolfssl
+        GIT_REPOSITORY          git@github.com:Laboratory-for-Safe-and-Secure-Systems/kritis3m_wolfssl.git
+        GIT_TAG                 origin/main
+        GIT_PROGRESS            TRUE
+        USES_TERMINAL_DOWNLOAD  TRUE
 )
 
-FetchContent_Declare(wolfssl
-    GIT_REPOSITORY          git@github.com:Laboratory-for-Safe-and-Secure-Systems/wolfssl.git
-    GIT_TAG                 origin/development
-    GIT_PROGRESS            TRUE
-    USES_TERMINAL_DOWNLOAD  TRUE
-)
-
-
-# Liboqs configuration
-set(OQS_DIST_BUILD  OFF)
-set(OQS_BUILD_ONLY_LIB ON)
-set(OQS_USE_OPENSSL OFF)
-set(OQS_ENABLE_KEM_BIKE OFF)
-set(OQS_ENABLE_KEM_FRODOKEM OFF)
-set(OQS_ENABLE_KEM_NTRUPRIME OFF)
-set(OQS_ENABLE_KEM_CLASSIC_MCELIECE OFF)
-set(OQS_ENABLE_KEM_HQC OFF)
-set(OQS_ENABLE_KEM_KYBER OFF)
-set(OQS_ENABLE_KEM_ML_KEM OFF)
-set(OQS_ENABLE_SIG_SPHINCS OFF)
-set(OQS_ENABLE_SIG_DILITHIUM OFF)
-set(OQS_ENABLE_SIG_MAYO OFF)
-set(OQS_ENABLE_SIG_ML_DSA OFF)
-set(OQS_ENABLE_SIG_STFL_XMSS OFF)
-set(OQS_ENABLE_SIG_STFL_LMS OFF)
-
-# WolfSSL configuration
-set(WOLFSSL_USER_SETTINGS ON)
-set(WOLFSSL_EXAMPLES OFF)
-set(WOLFSSL_CRYPT_TESTS OFF)
-set(BUILD_SHARED_LIBS OFF)
-set(WOLFSSL_OQS OFF)
-set(WOLFSSL_BUILD_OUT_OF_TREE ON)
-if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64")
-        message(STATUS "Enabling Intel ASM optimizations for WolfSSL")
-        set(WOLFSSL_INTEL_ASM ON)
-# elseif("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "aarch64|arm64")
-#         message(STATUS "Enabling ARM ASM optimizations for WolfSSL")
-#         set(WOLFSSL_ARM_ASM ON)
-endif()
-
+# Configuration
+set(KRITIS3M_WOLFSSL_STANDALONE ${KRITIS3M_ASL_STANDALONE})
 
 # Actually add the external repositories to our project
-FetchContent_GetProperties(liboqs)
-if(NOT liboqs_POPULATED)
-  FetchContent_Populate(liboqs)
-  add_subdirectory(${liboqs_SOURCE_DIR} ${liboqs_BINARY_DIR} EXCLUDE_FROM_ALL)
+FetchContent_GetProperties(kritis3m_wolfssl)
+if(NOT kritis3m_wolfssl_POPULATED)
+        FetchContent_Populate(kritis3m_wolfssl)
+
+        if(KRITIS3M_ASL_STANDALONE)
+                add_subdirectory(${kritis3m_wolfssl_SOURCE_DIR} ${kritis3m_wolfssl_BINARY_DIR})
+        else()
+                add_subdirectory(${kritis3m_wolfssl_SOURCE_DIR} ${kritis3m_wolfssl_BINARY_DIR} EXCLUDE_FROM_ALL)
+        endif()
 endif()
 
-FetchContent_GetProperties(wolfssl)
-if(NOT wolfssl_POPULATED)
-  FetchContent_Populate(wolfssl)
-  add_subdirectory(${wolfssl_SOURCE_DIR} ${wolfssl_BINARY_DIR} EXCLUDE_FROM_ALL)
-endif()
-
-# In order for WolfSSL to find the 'user_settings.h' file, we have to
-# provide the directory where it is located.
-target_include_directories(wolfssl PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/priv_include/wolfssl>)
-
-# Provide the liboqs headers (generated during build) for WolfSSL
-get_target_property(OQS_BINARY_DIR oqs BINARY_DIR)
-target_include_directories(wolfssl PUBLIC $<BUILD_INTERFACE:${OQS_BINARY_DIR}/../include>)
-
-# Link liboqs to WolfSSL
-target_link_libraries(wolfssl PRIVATE oqs)
+endif(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
 
 
 # Write the configuration into a file
@@ -93,14 +65,15 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/priv_include/asl_config.h.in asl_
 
 
 # Define the main library
-add_library(asl STATIC
+add_library(asl
         ${CMAKE_CURRENT_SOURCE_DIR}/src/asl.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/asl_logging.c
 )
 
 target_include_directories(asl PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_BINARY_DIR}
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:include/kritis3m_asl>
 )
 
 target_include_directories(asl PRIVATE
@@ -111,31 +84,50 @@ target_link_libraries(asl PRIVATE wolfssl)
 
 
 # Create combined static library that includes all dependencies
+if (NOT BUILD_SHARED_LIBS)
+
 set(LIBNAME "libkritis3m_asl.a")
 
+set(WOLFSSL_TARGET_NAME "wolfssl")
+set(LIBOQS_TARGET_NAME "oqs")
+
+if(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
+        set(WOLFSSL_TARGET_NAME "wolfssl::wolfssl")
+        set(LIBOQS_TARGET_NAME "OQS::oqs")
+endif(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
+
 set(create_combined_lib_script
-        "create ${LIBNAME}\naddlib $<TARGET_FILE:asl>\naddlib $<TARGET_FILE:wolfssl>\naddlib $<TARGET_FILE:oqs>\nsave\nend\n"
+        "create ${LIBNAME}\naddlib $<TARGET_FILE:asl>\naddlib $<TARGET_FILE:${WOLFSSL_TARGET_NAME}>\naddlib $<TARGET_FILE:${LIBOQS_TARGET_NAME}>\nsave\nend\n"
 )
 
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/create_combined_lib_script.ar"
-    CONTENT ${create_combined_lib_script}
-    CONDITION 1
+        CONTENT ${create_combined_lib_script}
+        CONDITION 1
 )
 
 add_custom_command(TARGET asl POST_BUILD
-    DEPENDS wolfssl oqs
-    COMMAND ${CMAKE_AR} -M < create_combined_lib_script.ar
-    COMMENT "Creating combined static library ${LIBNAME}"
+        DEPENDS wolfssl oqs
+        COMMAND ${CMAKE_AR} -M < create_combined_lib_script.ar
+        COMMENT "Creating combined static library ${LIBNAME}"
 )
 
-# Install the library files
+# Install the combined library file
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${LIBNAME} TYPE LIB)
 
-# Install header files
+endif(NOT BUILD_SHARED_LIBS)
+
+
+# Install files
+install(TARGETS asl EXPORT kritis3m_asl-export DESTINATION lib)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/ DESTINATION include/kritis3m_asl)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/asl_config.h DESTINATION include/kritis3m_asl)
 
-if(KRITIS3M_ASL_INTERNAL_API)
+# Install CMake configuration files
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/kritis3m_asl-config.cmake DESTINATION lib/cmake/kritis3m_asl)
+install(EXPORT kritis3m_asl-export DESTINATION lib/cmake/kritis3m_asl FILE kritis3m_asl-export.cmake)
+export(EXPORT kritis3m_asl-export FILE kritis3m_asl-export.cmake)
+
+if(KRITIS3M_ASL_INTERNAL_API AND NOT KRITIS3M_ASL_EXTERNAL_WOLFSSL)
         # Install the internal WolfSSL header files
         install(DIRECTORY ${wolfssl_SOURCE_DIR}/wolfssl/ DESTINATION include/kritis3m_asl/wolfssl)
         install(DIRECTORY ${wolfssl_BINARY_DIR}/wolfssl/ DESTINATION include/kritis3m_asl/wolfssl)
