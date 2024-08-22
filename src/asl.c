@@ -447,12 +447,14 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
 #endif
 
         /* Check if the private key and the device certificate match */
+#if !defined(__ZEPHYR__)
         if (privateKeyLoaded == true)
         {
         	ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
         	if (wolfssl_check_for_error(ret))
         		return ASL_INTERNAL_ERROR;
         }
+#endif
 
         /* Set the IO callbacks for send and receive */
         wolfSSL_CTX_SetIORecv(endpoint->wolfssl_context, wolfssl_read_callback);
