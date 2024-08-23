@@ -4,6 +4,7 @@ includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 
 Name: @PROJECT_NAME@
 Description: KRITIS3M Agile Security Library
+Version: 0.9.9
 Cflags: -I${includedir}/kritis3m_asl
 Libs: -L${libdir} -lkritis3m_asl
 
