@@ -384,8 +384,6 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         ret = wolfSSL_CTX_use_PrivateKey_Label(endpoint->wolfssl_context,
                                                                (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN,
                                                                DEVICE_ID_SECURE_ELEMENT);
-
-                        privateKeyLoaded = true;
                 #else
                         asl_log(ASL_LOG_LEVEL_ERR, "Secure element support is not compiled in, please compile with support enabled");
                         return ASL_PKCS11_ERROR;
@@ -399,6 +397,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                                                                 config->private_key.size,
                                                                 WOLFSSL_FILETYPE_PEM);
                 }
+                privateKeyLoaded = true;
 
                 if (wolfssl_check_for_error(ret))
                         return ASL_INTERNAL_ERROR;
