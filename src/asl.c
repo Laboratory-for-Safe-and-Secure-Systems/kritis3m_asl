@@ -931,7 +931,7 @@ int asl_handshake(asl_session* session)
 int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
 {
         uint8_t* tmp = buffer;
-        int bytes_read = ASL_SUCCESS;
+        int bytes_read = 0;
 
         if (session == NULL)
         {
@@ -1015,22 +1015,21 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
                 {
                         ret = wolfSSL_get_error(session->wolfssl_session, ret);
 
-                            if (ret == WOLFSSL_ERROR_WANT_READ)
+                        if (ret == WOLFSSL_ERROR_WANT_READ)
                         {
                                 /* We have to first receive data from the peer. In this case,
                                  * we discard the data and continue reading data from it. */
                                 ret = ASL_WANT_READ;
-                                break;
                         }
                         else if (ret == WOLFSSL_ERROR_WANT_WRITE)
                         {
-                                /* We have more to write. */
-                                continue;
+                                /* We have more to write, but obviously the socket can't handle
+                                 * it right now. */
+                                ret = ASL_WANT_WRITE;
                         }
                         else if (ret == WOLFSSL_ERROR_SYSCALL)
                         {
                                 ret = ASL_CONN_CLOSED;
-                                break;
                         }
                         else
                         {
@@ -1042,9 +1041,9 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
                                         asl_log(ASL_LOG_LEVEL_ERR, "wolfSSL_write returned %d: %s", ret, errMsg);
                                 }
                                 ret = ASL_INTERNAL_ERROR;
-
-                                break;
                         }
+
+                        break;
                 }
 
         }
