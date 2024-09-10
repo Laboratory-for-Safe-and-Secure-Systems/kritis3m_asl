@@ -94,7 +94,12 @@ typedef struct
         enum asl_hybrid_signature_mode hybrid_signature_mode;
         enum asl_key_exchange_method key_exchange_method;
 
-        char const* secure_element_middleware_path;
+        struct
+        {
+                char const* long_term_crypto_module_path;
+                char const* ephemeral_crypto_module_path;
+        }
+        pkcs11;
 
         struct
         {
@@ -142,6 +147,14 @@ typedef struct
         uint32_t rx_bytes;
 }
 asl_handshake_metrics;
+
+
+/* Create the default config for the Agile Security Library (asl). */
+asl_configuration asl_default_config(void);
+
+
+/* Create the default config for an asl endpoint. */
+asl_endpoint_configuration asl_default_endpoint_config(void);
 
 
 /* Initialize the Agile Security Library (asl).

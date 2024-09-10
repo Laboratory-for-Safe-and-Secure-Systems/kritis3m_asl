@@ -34,7 +34,8 @@ enum connection_state
 
 
 /* PKCS#11 support */
-#define DEVICE_ID_SECURE_ELEMENT 1
+#define DEVICE_ID_LONG_TERM_CRYPTO_MODULE 1
+#define DEVICE_ID_EPHEMERAL_CRYPTO_MODULE 2
 
 typedef struct
 {
@@ -51,7 +52,9 @@ asl_pkcs11_module;
 struct asl_endpoint
 {
         WOLFSSL_CTX* wolfssl_context;
-        asl_pkcs11_module secure_element;
+
+        asl_pkcs11_module long_term_crypto_module;
+        asl_pkcs11_module ephemeral_crypto_module;
 
 #if defined(HAVE_SECRET_CALLBACK)
         char* keylog_file;
@@ -82,7 +85,7 @@ static int wolfssl_write_callback(WOLFSSL* session, char* buffer, int size, void
 static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
 
 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path);
+static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path, int device_id);
 #endif
 
 
@@ -220,6 +223,44 @@ static int wolfssl_secret_callback(WOLFSSL* ssl, int id, const uint8_t* secret,
 #endif /* HAVE_SECRET_CALLBACK */
 
 
+/* Create the default config for the Agile Security Library (asl). */
+asl_configuration asl_default_config(void)
+{
+        asl_configuration default_config = {0};
+
+        default_config.logging_enabled = true;
+        default_config.log_level = ASL_LOG_LEVEL_WRN;
+        default_config.custom_log_callback = NULL;
+
+        return default_config;
+}
+
+
+/* Create the default config for an asl endpoint. */
+asl_endpoint_configuration asl_default_endpoint_config(void)
+{
+        asl_endpoint_configuration default_config = {0};
+
+        default_config.mutual_authentication = true;
+        default_config.no_encryption = false;
+        default_config.hybrid_signature_mode = ASL_HYBRID_SIGNATURE_MODE_DEFAULT;
+        default_config.key_exchange_method = ASL_KEX_DEFAULT;
+        default_config.pkcs11.long_term_crypto_module_path = NULL;
+        default_config.pkcs11.ephemeral_crypto_module_path = NULL;
+        default_config.device_certificate_chain.buffer = NULL;
+        default_config.device_certificate_chain.size = 0;
+        default_config.private_key.buffer = NULL;
+        default_config.private_key.size = 0;
+        default_config.private_key.additional_key_buffer = NULL;
+        default_config.private_key.additional_key_size = 0;
+        default_config.root_certificate.buffer = NULL;
+        default_config.root_certificate.size = 0;
+        default_config.keylog_file = NULL;
+
+        return default_config;
+}
+
+
 /* Initialize the Agile Security Library (asl).
  *
  * Parameter is a pointer to a filled asl_configuration structure.
@@ -264,7 +305,7 @@ int asl_init(asl_configuration const* config)
  *
  * Returns 0 on success, negative error code on failure (error message is logged to the console).
  */
-static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path)
+static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path, int device_id)
 {
         int ret = 0;
 
@@ -273,7 +314,7 @@ static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path)
                 return ASL_ARGUMENT_ERROR;
         }
 
-        /* Load the secure element middleware */
+        /* Load the PKCS#11 module library */
         if (module->initialized == false)
         {
                 asl_log(ASL_LOG_LEVEL_INF, "Initializing secure element");
@@ -296,7 +337,7 @@ static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path)
                 }
 
                 /* Register the device with WolfSSL */
-                ret = wc_CryptoCb_RegisterDevice(DEVICE_ID_SECURE_ELEMENT,
+                ret = wc_CryptoCb_RegisterDevice(device_id,
                                                  wc_Pkcs11_CryptoDevCb,
                                                  &module->token);
                 if (ret != 0)
@@ -360,22 +401,38 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         return ASL_CERTIFICATE_ERROR;
         }
 
+        /* Initialize the PKCS#11 module for ephemeral crypto usage */
+        if (config->pkcs11.ephemeral_crypto_module_path != NULL)
+        {
+                ret = wolfssl_configure_pkcs11(&endpoint->ephemeral_crypto_module,
+                                               config->pkcs11.ephemeral_crypto_module_path,
+                                               DEVICE_ID_EPHEMERAL_CRYPTO_MODULE);
+                if (ret != 0)
+                {
+                        asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure ephemeral crypto module");
+                        return ASL_PKCS11_ERROR;
+                }
+
+                wolfSSL_CTX_SetDevId(endpoint->wolfssl_context, DEVICE_ID_EPHEMERAL_CRYPTO_MODULE);
+        }
+
         /* Load the private key */
         bool privateKeyLoaded = false;
         if (config->private_key.buffer != NULL)
         {
-                if (strncmp((char const*)config->private_key.buffer, PKCS11_LABEL_IDENTIFIER, PKCS11_LABEL_IDENTIFIER_LEN) == 0)
+                if (strncmp((char const*)config->private_key.buffer, PKCS11_LABEL_IDENTIFIER,
+                            PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
                 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
                         /* Initialize the PKCS#11 module */
-                        ret = wolfssl_configure_pkcs11(&endpoint->secure_element, config->secure_element_middleware_path);
+                        ret = wolfssl_configure_pkcs11(&endpoint->long_term_crypto_module,
+                                                       config->pkcs11.long_term_crypto_module_path,
+                                                       DEVICE_ID_LONG_TERM_CRYPTO_MODULE);
                         if (ret != 0)
                         {
-                                asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure secure element");
+                                asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure long-term crypto module");
                                 return ASL_PKCS11_ERROR;
                         }
-
-                        // wolfSSL_CTX_SetDevId(endpoint->wolfssl_context, DEVICE_ID_SECURE_ELEMENT);
 
                         asl_log(ASL_LOG_LEVEL_DBG, "Using external private key with label \"%s\"",
                                 (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN);
@@ -383,7 +440,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         /* Use keys on the secure element (this also loads the label for the alt key) */
                         ret = wolfSSL_CTX_use_PrivateKey_Label(endpoint->wolfssl_context,
                                                                (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN,
-                                                               DEVICE_ID_SECURE_ELEMENT);
+                                                               DEVICE_ID_LONG_TERM_CRYPTO_MODULE);
                 #else
                         asl_log(ASL_LOG_LEVEL_ERR, "Secure element support is not compiled in, please compile with support enabled");
                         return ASL_PKCS11_ERROR;
@@ -408,14 +465,17 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         /* Load the alternative private key */
         if (config->private_key.additional_key_buffer != NULL)
         {
-                if (strncmp((char const*)config->private_key.additional_key_buffer, PKCS11_LABEL_IDENTIFIER, PKCS11_LABEL_IDENTIFIER_LEN) == 0)
+                if (strncmp((char const*)config->private_key.additional_key_buffer, PKCS11_LABEL_IDENTIFIER,
+                            PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
                 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
                         /* Initialize the PKCS#11 module */
-                        ret = wolfssl_configure_pkcs11(&endpoint->secure_element, config->secure_element_middleware_path);
+                        ret = wolfssl_configure_pkcs11(&endpoint->long_term_crypto_module,
+                                                       config->pkcs11.long_term_crypto_module_path,
+                                                       DEVICE_ID_LONG_TERM_CRYPTO_MODULE);
                         if (ret != 0)
                         {
-                                asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure secure element");
+                                asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure long-term crypto module");
                                 return ASL_PKCS11_ERROR;
                         }
 
@@ -425,7 +485,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         /* Use keys on the secure element (this also loads the label for the alt key) */
                         ret = wolfSSL_CTX_use_AltPrivateKey_Label(endpoint->wolfssl_context,
                                         (char const*) config->private_key.additional_key_buffer + PKCS11_LABEL_IDENTIFIER_LEN,
-                                        DEVICE_ID_SECURE_ELEMENT);
+                                        DEVICE_ID_LONG_TERM_CRYPTO_MODULE);
                 #else
                         asl_log(ASL_LOG_LEVEL_ERR, "Secure element support is not compiled in, please compile with support enabled");
                         return ASL_PKCS11_ERROR;
@@ -447,12 +507,12 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
 
         /* Check if the private key and the device certificate match */
 #if !defined(__ZEPHYR__)
-        if (privateKeyLoaded == true)
-        {
-        	ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
-        	if (wolfssl_check_for_error(ret))
-        		return ASL_INTERNAL_ERROR;
-        }
+        // if (privateKeyLoaded == true)
+        // {
+        // 	ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
+        // 	if (wolfssl_check_for_error(ret))
+        // 		return ASL_INTERNAL_ERROR;
+        // }
 #endif
 
         /* Set the IO callbacks for send and receive */
@@ -493,7 +553,8 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
                 return NULL;
         }
 
-        new_endpoint->secure_element.initialized = false;
+        new_endpoint->long_term_crypto_module.initialized = false;
+        new_endpoint->ephemeral_crypto_module.initialized = false;
 
 #if defined(HAVE_SECRET_CALLBACK)
         if (config->keylog_file != NULL)
@@ -620,7 +681,8 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
                 return NULL;
         }
 
-        new_endpoint->secure_element.initialized = false;
+        new_endpoint->long_term_crypto_module.initialized = false;
+        new_endpoint->ephemeral_crypto_module.initialized = false;
 
 #if defined(HAVE_SECRET_CALLBACK)
         if (config->keylog_file != NULL)
@@ -1129,12 +1191,19 @@ void asl_free_endpoint(asl_endpoint* endpoint)
 {
         if (endpoint != NULL)
         {
-                /* Properly cleanup PKCS#11 stuff*/
-                if (endpoint->secure_element.initialized == true)
+                /* Properly cleanup PKCS#11 stuff */
+                if (endpoint->long_term_crypto_module.initialized == true)
                 {
                 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                        wc_Pkcs11Token_Final(&endpoint->secure_element.token);
-                        wc_Pkcs11_Finalize(&endpoint->secure_element.device);
+                        wc_Pkcs11Token_Final(&endpoint->long_term_crypto_module.token);
+                        wc_Pkcs11_Finalize(&endpoint->long_term_crypto_module.device);
+                #endif
+                }
+                if (endpoint->ephemeral_crypto_module.initialized == true)
+                {
+                #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+                        wc_Pkcs11Token_Final(&endpoint->ephemeral_crypto_module.token);
+                        wc_Pkcs11_Finalize(&endpoint->ephemeral_crypto_module.device);
                 #endif
                 }
 
