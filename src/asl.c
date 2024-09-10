@@ -887,7 +887,7 @@ int asl_handshake(asl_session* session)
 
                 #ifdef HAVE_SECRET_CALLBACK
                         wolfSSL_FreeArrays(session->wolfssl_session);
-                    #endif
+                #endif
 
                         ret = ASL_SUCCESS;
                         break;
@@ -948,8 +948,9 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
 
                         if (ret == WOLFSSL_ERROR_WANT_WRITE)
                         {
-                                /* Call wolfSSL_read() again */
-                                continue;
+                                /* Unable to write data, indicate to higher layers */
+                                bytes_read = ASL_WANT_WRITE;
+                                break;
                         }
                         else if (ret == WOLFSSL_ERROR_WANT_READ)
                         {
@@ -971,6 +972,21 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
                                 bytes_read = ASL_INTERNAL_ERROR;
                                 break;
                         }
+                }
+
+                /* It is technically possible to call asl_receive() and asl_send() without performing the
+                 * TLS handshake via asl_handshake(). Although this is discouraged, we do not prevent it.
+                 * However, we have to properly handle internal state here, mainly to free any handshake
+                 * buffers. As soon as wolfssl_read() or wolfssl_write() return a successful return code,
+                 * we are sure to finished the TLS handshake. Hence, we can update the state here safely.
+                 */
+                if (session->state != CONNECTION_STATE_CONNECTED)
+                {
+                        session->state = CONNECTION_STATE_CONNECTED;
+
+                #ifdef HAVE_SECRET_CALLBACK
+                        wolfSSL_FreeArrays(session->wolfssl_session);
+                #endif
                 }
 
                 tmp += ret;
@@ -1010,6 +1026,21 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
                         size -= ret;
                         tmp += ret;
                         ret = ASL_SUCCESS;
+
+                        /* It is technically possible to call asl_receive() and asl_send() without performing the
+                        * TLS handshake via asl_handshake(). Although this is discouraged, we do not prevent it.
+                        * However, we have to properly handle internal state here, mainly to free any handshake
+                        * buffers. As soon as wolfssl_read() or wolfssl_write() return a successful return code,
+                        * we are sure to finished the TLS handshake. Hence, we can update the state here safely.
+                        */
+                        if (session->state != CONNECTION_STATE_CONNECTED)
+                        {
+                                session->state = CONNECTION_STATE_CONNECTED;
+
+                        #ifdef HAVE_SECRET_CALLBACK
+                                wolfSSL_FreeArrays(session->wolfssl_session);
+                        #endif
+                        }
                 }
                 else
                 {
@@ -1045,7 +1076,6 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
 
                         break;
                 }
-
         }
 
         return ret;
