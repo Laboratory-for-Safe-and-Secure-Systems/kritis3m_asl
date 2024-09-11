@@ -25,6 +25,14 @@ extern size_t wolfsslMemoryBufferSize;
 #endif
 
 
+#define ERROR_OUT(error_code, ...) { \
+                                        asl_log(ASL_LOG_LEVEL_ERR, __VA_ARGS__); \
+                                        ret = error_code; \
+                                        goto cleanup; \
+                                   }
+
+
+
 enum connection_state
 {
         CONNECTION_STATE_NOT_CONNECTED,
@@ -33,28 +41,30 @@ enum connection_state
 };
 
 
-/* PKCS#11 support */
-#define DEVICE_ID_LONG_TERM_CRYPTO_MODULE 1
-#define DEVICE_ID_EPHEMERAL_CRYPTO_MODULE 2
-
-typedef struct
-{
-#ifdef HAVE_PKCS11
-	Pkcs11Dev device;
-	Pkcs11Token token;
-#endif
-	bool initialized;
-}
-asl_pkcs11_module;
-
-
 /* Data structure for an endpoint */
 struct asl_endpoint
 {
         WOLFSSL_CTX* wolfssl_context;
 
-        asl_pkcs11_module long_term_crypto_module;
-        asl_pkcs11_module ephemeral_crypto_module;
+        struct
+        {
+        #ifdef HAVE_PKCS11
+                Pkcs11Dev device;
+                Pkcs11Token token;
+        #endif
+                int device_id;
+                bool initialized;
+        }
+        long_term_crypto_module;
+
+        struct
+        {
+        #ifdef HAVE_PKCS11
+                Pkcs11Dev device;
+        #endif
+                bool initialized;
+        }
+        ephemeral_crypto_module;
 
 #if defined(HAVE_SECRET_CALLBACK)
         char* keylog_file;
@@ -70,13 +80,39 @@ struct asl_session
 
         struct
         {
+        #ifdef HAVE_PKCS11
+                Pkcs11Token token;
+        #endif
+                int device_id;
+                bool initialized;
+        }
+        ephemeral_crypto_session;
+
+        struct
+        {
                 struct timespec start_time;
                 struct timespec end_time;
                 uint32_t tx_bytes;
                 uint32_t rx_bytes;
         }
-        handshake_metrics_priv;
+        handshake_metrics;
 };
+
+
+/* PKCS#11 Device ID handling. Each endpoint needs a unique DevID for
+ * its long-term crypto module (secure element). All sessions for a
+ * given endpoint inherit that module with its DevID.
+ * Furthermore, each session requires another unique DevID for its
+ * ephemeral crypto module.
+ *
+ * We implement that by using two static counters that count up modulo
+ * a fixed number. */
+#define DEVICE_ID_OFFSET_ENDPOINT 1
+#define DEVICE_ID_MAX_ENDPOINT 1000
+#define DEVICE_ID_OFFSET_SESSION DEVICE_ID_MAX_ENDPOINT
+#define DEVICE_ID_MAX_SESSION 10000
+static int dev_id_counter_endpoint = 0;
+static int dev_id_counter_session = 0;
 
 
 /* Internal method declarations */
@@ -85,7 +121,9 @@ static int wolfssl_write_callback(WOLFSSL* session, char* buffer, int size, void
 static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
 
 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path, int device_id);
+static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, char const* path);
+static int get_next_device_id_endpoint(void);
+static int get_next_device_id_session(void);
 #endif
 
 
@@ -112,7 +150,7 @@ static int wolfssl_read_callback(WOLFSSL* wolfssl, char* buffer, int size, void*
         /* Update handshake metrics */
         if (session != NULL && session->state == CONNECTION_STATE_HANDSHAKE)
         {
-                session->handshake_metrics_priv.rx_bytes += ret;
+                session->handshake_metrics.rx_bytes += ret;
         }
 
         return ret;
@@ -139,7 +177,7 @@ static int wolfssl_write_callback(WOLFSSL* wolfssl, char* buffer, int size, void
         /* Update handshake metrics */
         if (session != NULL && session->state == CONNECTION_STATE_HANDSHAKE)
         {
-                session->handshake_metrics_priv.tx_bytes += ret;
+                session->handshake_metrics.tx_bytes += ret;
         }
 
         return ret;
@@ -160,9 +198,7 @@ static int wolfssl_secret_callback(WOLFSSL* ssl, int id, const uint8_t* secret,
         {
                 fp = fopen((const char*)ctx, "a");
                 if (fp == NULL)
-                {
                         return BAD_FUNC_ARG;
-                }
         }
 
         serverRandomSz = (int)wolfSSL_get_client_random(ssl, serverRandom,
@@ -213,10 +249,7 @@ static int wolfssl_secret_callback(WOLFSSL* ssl, int id, const uint8_t* secret,
         }
         fprintf(fp, "\n");
 
-        if (fp != stderr)
-        {
-                fclose(fp);
-        }
+        fclose(fp);
 
         return 0;
 }
@@ -305,67 +338,78 @@ int asl_init(asl_configuration const* config)
  *
  * Returns 0 on success, negative error code on failure (error message is logged to the console).
  */
-static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path, int device_id)
+static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, char const* path)
 {
         int ret = 0;
 
-        if ((module == NULL) || (path == NULL))
-        {
+        if ((endpoint == NULL) || (path == NULL))
                 return ASL_ARGUMENT_ERROR;
-        }
 
         /* Load the PKCS#11 module library */
-        if (module->initialized == false)
+        if (endpoint->long_term_crypto_module.initialized == false)
         {
-                asl_log(ASL_LOG_LEVEL_INF, "Initializing secure element");
+                asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module from %s", path);
 
                 /* Initialize the PKCS#11 library */
-                ret = wc_Pkcs11_Initialize(&module->device, path, wolfssl_heap);
+                ret = wc_Pkcs11_Initialize(&endpoint->long_term_crypto_module.device, path, wolfssl_heap);
                 if (ret != 0)
-                {
-                        asl_log(ASL_LOG_LEVEL_ERR, "unable to initialize PKCS#11 library: %d", ret);
-                        return ASL_PKCS11_ERROR;
-                }
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 library: %d", ret);
 
                 /* Initialize the token */
-                ret = wc_Pkcs11Token_Init_NoLogin(&module->token, &module->device, -1, NULL);
+                ret = wc_Pkcs11Token_Init_NoLogin(&endpoint->long_term_crypto_module.token,
+                                                  &endpoint->long_term_crypto_module.device,
+                                                  -1, NULL);
                 if (ret != 0)
-                {
-                        asl_log(ASL_LOG_LEVEL_ERR, "unable to initialize PKCS#11 token: %d", ret);
-                        wc_Pkcs11_Finalize(&module->device);
-                        return ASL_PKCS11_ERROR;
-                }
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 token: %d", ret);
 
                 /* Register the device with WolfSSL */
-                ret = wc_CryptoCb_RegisterDevice(device_id,
+                ret = wc_CryptoCb_RegisterDevice(endpoint->long_term_crypto_module.device_id,
                                                  wc_Pkcs11_CryptoDevCb,
-                                                 &module->token);
+                                                 &endpoint->long_term_crypto_module.token);
                 if (ret != 0)
-                {
-                        asl_log(ASL_LOG_LEVEL_ERR, "Failed to register PKCS#11 callback: %d", ret);
-                        wc_Pkcs11Token_Final(&module->token);
-                        wc_Pkcs11_Finalize(&module->device);
-                        return ASL_PKCS11_ERROR;
-                }
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to register PKCS#11 callback: %d", ret);
 
                 /* Create a persistent session with the secure element */
-                ret = wc_Pkcs11Token_Open(&module->token, 1);
+                ret = wc_Pkcs11Token_Open(&endpoint->long_term_crypto_module.token, 1);
                 if (ret == 0)
                 {
-                        module->initialized = true;
-                        asl_log(ASL_LOG_LEVEL_INF, "Secure element initialized");
+                        endpoint->long_term_crypto_module.initialized = true;
+                        asl_log(ASL_LOG_LEVEL_INF, "PKCS#11 module initialized");
                 }
                 else
                 {
-                        module->initialized = false;
-                        wc_Pkcs11Token_Final(&module->token);
-                        wc_Pkcs11_Finalize(&module->device);
-                        asl_log(ASL_LOG_LEVEL_ERR, "Secure element initialization failed: %d", ret);
-                        return ASL_PKCS11_ERROR;
+                        endpoint->long_term_crypto_module.initialized = false;
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to open PKCS#11 token: %d", ret);
                 }
         }
 
+        return 0;
+
+cleanup:
+        wc_Pkcs11Token_Final(&endpoint->long_term_crypto_module.token);
+        wc_Pkcs11_Finalize(&endpoint->long_term_crypto_module.device);
+
         return ret;
+}
+
+
+static int get_next_device_id_endpoint(void)
+{
+        int current_id = dev_id_counter_endpoint;
+
+        dev_id_counter_endpoint = (dev_id_counter_endpoint + 1) % DEVICE_ID_MAX_ENDPOINT;
+
+        return current_id + DEVICE_ID_OFFSET_ENDPOINT;
+}
+
+
+static int get_next_device_id_session(void)
+{
+        int current_id = dev_id_counter_session;
+
+        dev_id_counter_session = (dev_id_counter_session + 1) % DEVICE_ID_MAX_SESSION;
+
+        return current_id + DEVICE_ID_OFFSET_SESSION;
 }
 
 #endif /* KRITIS3M_ASL_ENABLE_PKCS11 */
@@ -377,10 +421,13 @@ static int wolfssl_configure_pkcs11(asl_pkcs11_module* module, char const* path,
  */
 static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config)
 {
+        if ((endpoint == NULL) || (config == NULL))
+                return ASL_ARGUMENT_ERROR;
+
         /* Only allow TLS version 1.3 */
         int ret = wolfSSL_CTX_SetMinVersion(endpoint->wolfssl_context, WOLFSSL_TLSV1_3);
         if (wolfssl_check_for_error(ret))
-                return ASL_INTERNAL_ERROR;
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to set minimum TLS version");
 
         /* Load root certificate */
         ret = wolfSSL_CTX_load_verify_buffer(endpoint->wolfssl_context,
@@ -388,7 +435,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                                              config->root_certificate.size,
                                              WOLFSSL_FILETYPE_PEM);
         if (wolfssl_check_for_error(ret))
-                return ASL_CERTIFICATE_ERROR;
+                ERROR_OUT(ASL_CERTIFICATE_ERROR, "Unable to load root certificate");
 
         /* Load device certificate chain */
         if (config->device_certificate_chain.buffer != NULL)
@@ -398,22 +445,23 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                                                                 config->device_certificate_chain.size,
                                                                 WOLFSSL_FILETYPE_PEM);
                 if (wolfssl_check_for_error(ret))
-                        return ASL_CERTIFICATE_ERROR;
+                        ERROR_OUT(ASL_CERTIFICATE_ERROR, "Unable to load device certificate chain");
         }
 
         /* Initialize the PKCS#11 module for ephemeral crypto usage */
         if (config->pkcs11.ephemeral_crypto_module_path != NULL)
         {
-                ret = wolfssl_configure_pkcs11(&endpoint->ephemeral_crypto_module,
-                                               config->pkcs11.ephemeral_crypto_module_path,
-                                               DEVICE_ID_EPHEMERAL_CRYPTO_MODULE);
-                if (ret != 0)
-                {
-                        asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure ephemeral crypto module");
-                        return ASL_PKCS11_ERROR;
-                }
+                asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module from %s",
+                        config->pkcs11.ephemeral_crypto_module_path);
 
-                wolfSSL_CTX_SetDevId(endpoint->wolfssl_context, DEVICE_ID_EPHEMERAL_CRYPTO_MODULE);
+                /* Initialize the PKCS#11 library */
+                ret = wc_Pkcs11_Initialize(&endpoint->ephemeral_crypto_module.device,
+                                           config->pkcs11.ephemeral_crypto_module_path,
+                                           wolfssl_heap);
+                if (ret != 0)
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 library: %d", ret);
+
+                endpoint->ephemeral_crypto_module.initialized = true;
         }
 
         /* Load the private key */
@@ -424,15 +472,13 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
                 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+                        endpoint->long_term_crypto_module.device_id = get_next_device_id_endpoint();
+
                         /* Initialize the PKCS#11 module */
-                        ret = wolfssl_configure_pkcs11(&endpoint->long_term_crypto_module,
-                                                       config->pkcs11.long_term_crypto_module_path,
-                                                       DEVICE_ID_LONG_TERM_CRYPTO_MODULE);
+                        ret = wolfssl_configure_pkcs11_endpoint(endpoint,
+                                                                config->pkcs11.long_term_crypto_module_path);
                         if (ret != 0)
-                        {
-                                asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure long-term crypto module");
-                                return ASL_PKCS11_ERROR;
-                        }
+                                ERROR_OUT(ASL_PKCS11_ERROR, "Failed to configure long-term crypto module");
 
                         asl_log(ASL_LOG_LEVEL_DBG, "Using external private key with label \"%s\"",
                                 (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN);
@@ -440,10 +486,9 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         /* Use keys on the secure element (this also loads the label for the alt key) */
                         ret = wolfSSL_CTX_use_PrivateKey_Label(endpoint->wolfssl_context,
                                                                (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN,
-                                                               DEVICE_ID_LONG_TERM_CRYPTO_MODULE);
+                                                               endpoint->long_term_crypto_module.device_id);
                 #else
-                        asl_log(ASL_LOG_LEVEL_ERR, "Secure element support is not compiled in, please compile with support enabled");
-                        return ASL_PKCS11_ERROR;
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Secure element support is not compiled in, please compile with support enabled");
                 #endif
                 }
                 else
@@ -457,7 +502,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                 privateKeyLoaded = true;
 
                 if (wolfssl_check_for_error(ret))
-                        return ASL_INTERNAL_ERROR;
+                        ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to load private key");
         }
 
 
@@ -469,15 +514,14 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
                 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+                        if (endpoint->long_term_crypto_module.device_id == INVALID_DEVID)
+                                endpoint->long_term_crypto_module.device_id = get_next_device_id_endpoint();
+
                         /* Initialize the PKCS#11 module */
-                        ret = wolfssl_configure_pkcs11(&endpoint->long_term_crypto_module,
-                                                       config->pkcs11.long_term_crypto_module_path,
-                                                       DEVICE_ID_LONG_TERM_CRYPTO_MODULE);
+                        ret = wolfssl_configure_pkcs11_endpoint(endpoint,
+                                                                config->pkcs11.long_term_crypto_module_path);
                         if (ret != 0)
-                        {
-                                asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure long-term crypto module");
-                                return ASL_PKCS11_ERROR;
-                        }
+                                ERROR_OUT(ASL_PKCS11_ERROR, "Failed to configure long-term crypto module");
 
                         asl_log(ASL_LOG_LEVEL_DBG, "Using external alternative private key with label \"%s\"",
                                 (char const*) config->private_key.additional_key_buffer + PKCS11_LABEL_IDENTIFIER_LEN);
@@ -485,10 +529,9 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         /* Use keys on the secure element (this also loads the label for the alt key) */
                         ret = wolfSSL_CTX_use_AltPrivateKey_Label(endpoint->wolfssl_context,
                                         (char const*) config->private_key.additional_key_buffer + PKCS11_LABEL_IDENTIFIER_LEN,
-                                        DEVICE_ID_LONG_TERM_CRYPTO_MODULE);
+                                        endpoint->long_term_crypto_module.device_id);
                 #else
-                        asl_log(ASL_LOG_LEVEL_ERR, "Secure element support is not compiled in, please compile with support enabled");
-                        return ASL_PKCS11_ERROR;
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Secure element support is not compiled in, please compile with support enabled");
                 #endif
                 }
                 else
@@ -501,18 +544,18 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                 }
 
                 if (wolfssl_check_for_error(ret))
-                        return ASL_INTERNAL_ERROR;
+                        ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to load alternative private key");
         }
 #endif
 
         /* Check if the private key and the device certificate match */
 #if !defined(__ZEPHYR__)
-        // if (privateKeyLoaded == true)
-        // {
-        // 	ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
-        // 	if (wolfssl_check_for_error(ret))
-        // 		return ASL_INTERNAL_ERROR;
-        // }
+        if (privateKeyLoaded == true)
+        {
+        	ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
+        	if (wolfssl_check_for_error(ret))
+                        ERROR_OUT(ASL_INTERNAL_ERROR, "Private key and device certificate do not match");
+        }
 #endif
 
         /* Set the IO callbacks for send and receive */
@@ -528,6 +571,9 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         wolfSSL_CTX_set_verify(endpoint->wolfssl_context, verify_mode, NULL);
 
         return ASL_SUCCESS;
+
+cleanup:
+        return ret;
 }
 
 
@@ -540,59 +586,42 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
  */
 asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config)
 {
+        int ret = 0;
+
         if (config == NULL)
-        {
                 return NULL;
-        }
 
         /* Create a new endpoint object */
         asl_endpoint* new_endpoint = malloc(sizeof(asl_endpoint));
         if (new_endpoint == NULL)
-        {
-                asl_log(ASL_LOG_LEVEL_ERR, "Unable to allocate memory for new WolfSSL endpoint");
-                return NULL;
-        }
+                ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL endpoint");
 
         new_endpoint->long_term_crypto_module.initialized = false;
         new_endpoint->ephemeral_crypto_module.initialized = false;
+        new_endpoint->long_term_crypto_module.device_id = INVALID_DEVID;
 
 #if defined(HAVE_SECRET_CALLBACK)
         if (config->keylog_file != NULL)
         {
                 new_endpoint->keylog_file = (char*) malloc(strlen(config->keylog_file) + 1);
                 if (new_endpoint->keylog_file == NULL)
-                {
-                        asl_log(ASL_LOG_LEVEL_ERR, "Unable to allocate memory for keylog file name");
-                        free(new_endpoint);
-                        return NULL;
-                }
+                        ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for keylog file name");
+
                 strcpy(new_endpoint->keylog_file, config->keylog_file);
         }
         else
-        {
                 new_endpoint->keylog_file = NULL;
-        }
 #endif
 
         /* Create the TLS server context */
         new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_server_method_ex(wolfssl_heap), wolfssl_heap);
         if (new_endpoint->wolfssl_context == NULL)
-        {
-                asl_log(ASL_LOG_LEVEL_ERR, "Unable to create a new WolfSSL server context");
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to create a new WolfSSL server context");
 
         /* Configure the new endpoint */
-        int ret = wolfssl_configure_endpoint(new_endpoint, config);
+        ret = wolfssl_configure_endpoint(new_endpoint, config);
         if (ret != ASL_SUCCESS)
-        {
-                asl_log(ASL_LOG_LEVEL_ERR, "Failed to configure new TLS server context: %s (%d)",
-                        asl_error_message(ret), ret);
-                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure new TLS server context");
 
         /* Configure the available curves for Key Exchange. For the server, all are allowed to
          * support various clients. */
@@ -617,11 +646,7 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         ret = wolfSSL_CTX_set_groups(new_endpoint->wolfssl_context, wolfssl_key_exchange_curves,
                                      sizeof(wolfssl_key_exchange_curves) / sizeof(int));
         if (wolfssl_check_for_error(ret))
-        {
-                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure key exchange curves");
 
         /* Configure the available cipher suites for TLS 1.3
          * We only support AES GCM with 256 bit key length and the
@@ -630,11 +655,7 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context,
                                 "TLS13-AES256-GCM-SHA384:TLS13-SHA384-SHA384");
         if (wolfssl_check_for_error(ret))
-        {
-                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
 
 #ifdef WOLFSSL_DUAL_ALG_CERTS
         /* Set the preference for verfication of hybrid signatures to be for both the
@@ -648,14 +669,15 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 
         ret = wolfSSL_CTX_UseCKS(new_endpoint->wolfssl_context, cks_order, sizeof(cks_order));
         if (wolfssl_check_for_error(ret))
-        {
-                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure hybrid signature verification");
 #endif
 
         return new_endpoint;
+
+cleanup:
+        asl_free_endpoint(new_endpoint);
+
+        return NULL;
 }
 
 
@@ -668,59 +690,42 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
  */
 asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config)
 {
+        int ret = 0;
+
         if (config == NULL)
-        {
                 return NULL;
-        }
 
         /* Create a new endpoint object */
         asl_endpoint* new_endpoint = malloc(sizeof(asl_endpoint));
         if (new_endpoint == NULL)
-        {
-                asl_log(ASL_LOG_LEVEL_ERR, "Unable to allocate memory for new WolfSSL endpoint");
-                return NULL;
-        }
+                ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL endpoint");
 
         new_endpoint->long_term_crypto_module.initialized = false;
         new_endpoint->ephemeral_crypto_module.initialized = false;
+        new_endpoint->long_term_crypto_module.device_id = INVALID_DEVID;
 
 #if defined(HAVE_SECRET_CALLBACK)
         if (config->keylog_file != NULL)
         {
                 new_endpoint->keylog_file = (char*) malloc(strlen(config->keylog_file) + 1);
                 if (new_endpoint->keylog_file == NULL)
-                {
-                        asl_log(ASL_LOG_LEVEL_ERR, "Unable to allocate memory for keylog file name");
-                        free(new_endpoint);
-                        return NULL;
-                }
+                        ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for keylog file name");
+
                 strcpy(new_endpoint->keylog_file, config->keylog_file);
         }
         else
-        {
                 new_endpoint->keylog_file = NULL;
-        }
 #endif
 
         /* Create the TLS client context */
         new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_client_method_ex(wolfssl_heap), wolfssl_heap);
         if (new_endpoint->wolfssl_context == NULL)
-        {
-                asl_log(ASL_LOG_LEVEL_ERR, "Unable to create a new WolfSSL client context");
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to create a new WolfSSL client context");
 
         /* Configure the new endpoint */
-        int ret = wolfssl_configure_endpoint(new_endpoint, config);
+        ret = wolfssl_configure_endpoint(new_endpoint, config);
         if (ret != ASL_SUCCESS)
-        {
-                asl_log(ASL_LOG_LEVEL_ERR, "Failed to confiugre new TLS client context: %s (%d)",
-                        asl_error_message(ret), ret);
-                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure new TLS client context");
 
         /* Configure the curve for Key Exchange. For the client, we allowd only the one we want
          * to select (as the key share in the ClientHello is directly derived from it). If no
@@ -784,11 +789,7 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         }
         ret = wolfSSL_CTX_set_groups(new_endpoint->wolfssl_context, &wolfssl_key_exchange_curve, 1);
         if (wolfssl_check_for_error(ret))
-        {
-                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure key exchange curve");
 
         /* Configure the available cipher suites for TLS 1.3
          * We only support AES GCM with 256 bit key length and the
@@ -796,16 +797,11 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
          */
         char const* cipher_list = "TLS13-AES256-GCM-SHA384";
         if (config->no_encryption)
-        {
                 cipher_list = "TLS13-SHA384-SHA384";
-        }
+
         ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context, cipher_list);
         if (wolfssl_check_for_error(ret))
-        {
-                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
 
 #ifdef WOLFSSL_DUAL_ALG_CERTS
         /* Set the preference for verfication of hybrid signatures. If the user has not
@@ -829,14 +825,15 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         }
         ret = wolfSSL_CTX_UseCKS(new_endpoint->wolfssl_context, cks, sizeof(cks));
         if (wolfssl_check_for_error(ret))
-        {
-                wolfSSL_CTX_free(new_endpoint->wolfssl_context);
-                free(new_endpoint);
-                return NULL;
-        }
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure hybrid signature verification");
 #endif
 
         return new_endpoint;
+
+cleanup:
+        asl_free_endpoint(new_endpoint);
+
+        return NULL;
 }
 
 
@@ -850,32 +847,66 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
  */
 asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
 {
+        int ret = 0;
+
         if (endpoint == NULL)
-        {
-                return NULL;
-        }
+                 return NULL;
 
         /* Create a new session object */
         asl_session* new_session = malloc(sizeof(asl_session));
         if (new_session == NULL)
-        {
-                asl_log(ASL_LOG_LEVEL_ERR, "Unable to allocate memory for new WolfSSL session");
-                return NULL;
-        }
+                ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL session");
+
+        new_session->state = CONNECTION_STATE_NOT_CONNECTED;
+        new_session->ephemeral_crypto_session.initialized = false;
+        new_session->ephemeral_crypto_session.device_id = INVALID_DEVID;
 
         /* Create a new TLS session */
         new_session->wolfssl_session = wolfSSL_new(endpoint->wolfssl_context);
         if (new_session->wolfssl_session == NULL)
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to create a new WolfSSL session");
+
+        /* Initialize PKCS#11 module for ephemeral crypto */
+        if (endpoint->ephemeral_crypto_module.initialized == true)
         {
-                asl_log(ASL_LOG_LEVEL_ERR, "Unable to create a new WolfSSL session");
-                free(new_session);
-                return NULL;
+                new_session->ephemeral_crypto_session.device_id = get_next_device_id_session();
+
+                /* Initialize the token */
+                ret = wc_Pkcs11Token_Init_NoLogin(&new_session->ephemeral_crypto_session.token,
+                                                      &endpoint->ephemeral_crypto_module.device,
+                                                      -1, NULL);
+                if (ret != 0)
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 token: %d", ret);
+
+                /* Register the device with WolfSSL */
+                ret = wc_CryptoCb_RegisterDevice(new_session->ephemeral_crypto_session.device_id,
+                                                 wc_Pkcs11_CryptoDevCb,
+                                                 &new_session->ephemeral_crypto_session.token);
+                if (ret != 0)
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to register PKCS#11 callback: %d", ret);
+
+                /* Create a persistent session with the secure element */
+                ret = wc_Pkcs11Token_Open(&new_session->ephemeral_crypto_session.token, 1);
+                if (ret == 0)
+                {
+                        new_session->ephemeral_crypto_session.initialized = true;
+                        asl_log(ASL_LOG_LEVEL_INF, "PKCS#11 module initialized");
+                }
+                else
+                {
+                        new_session->ephemeral_crypto_session.initialized = false;
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to open PKCS#11 token: %d", ret);
+                }
+
+                wolfSSL_SetDevId(new_session->wolfssl_session,
+                                 new_session->ephemeral_crypto_session.device_id);
         }
+
 
         /* Initialize the remaining attributes */
         new_session->state = CONNECTION_STATE_NOT_CONNECTED;
-        new_session->handshake_metrics_priv.tx_bytes = 0;
-        new_session->handshake_metrics_priv.rx_bytes = 0;
+        new_session->handshake_metrics.tx_bytes = 0;
+        new_session->handshake_metrics.rx_bytes = 0;
 
         /* Store the socket fd */
         wolfSSL_set_fd(new_session->wolfssl_session, socket_fd);
@@ -901,6 +932,11 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
 #endif
 
         return new_session;
+
+cleanup:
+        asl_free_session(new_session);
+
+        return NULL;
 }
 
 
@@ -915,9 +951,7 @@ int asl_handshake(asl_session* session)
         int ret = -1;
 
         if (session == NULL)
-        {
                 return ASL_ARGUMENT_ERROR;
-        }
 
         /* Obtain handshake metrics */
         if (session->state == CONNECTION_STATE_NOT_CONNECTED)
@@ -926,10 +960,8 @@ int asl_handshake(asl_session* session)
 
                 /* Get start time */
                 if (clock_gettime(CLOCK_MONOTONIC,
-                                  &session->handshake_metrics_priv.start_time) != 0)
-                {
+                                  &session->handshake_metrics.start_time) != 0)
                         asl_log(ASL_LOG_LEVEL_WRN, "Error starting handshake timer");
-                }
         }
 
         while (ret != 0)
@@ -942,10 +974,8 @@ int asl_handshake(asl_session* session)
 
                         /* Get end time */
                         if (clock_gettime(CLOCK_MONOTONIC,
-                                        &session->handshake_metrics_priv.end_time) != 0)
-                        {
+                                        &session->handshake_metrics.end_time) != 0)
                                 asl_log(ASL_LOG_LEVEL_WRN, "Error stopping handshake timer");
-                        }
 
                 #ifdef HAVE_SECRET_CALLBACK
                         wolfSSL_FreeArrays(session->wolfssl_session);
@@ -965,7 +995,9 @@ int asl_handshake(asl_session* session)
                         }
                         else if (ret == WOLFSSL_ERROR_WANT_WRITE)
                         {
-                                continue;
+                                /* Unable to write data, indicate to higher layers */
+                                ret = ASL_WANT_WRITE;
+                                break;
                         }
                         else
                         {
@@ -1146,14 +1178,20 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
 /* Get metics of the handshake. */
 asl_handshake_metrics asl_get_handshake_metrics(asl_session* session)
 {
-        asl_handshake_metrics metrics;
+        asl_handshake_metrics metrics = {
+                .duration_us = 0.0,
+                .tx_bytes = 0,
+                .rx_bytes = 0
+        };
 
         if (session != NULL)
         {
-                metrics.duration_us = (session->handshake_metrics_priv.end_time.tv_sec - session->handshake_metrics_priv.start_time.tv_sec) * 1000000.0 +
-                                (session->handshake_metrics_priv.end_time.tv_nsec - session->handshake_metrics_priv.start_time.tv_nsec) / 1000.0;
-                metrics.tx_bytes = session->handshake_metrics_priv.tx_bytes;
-                metrics.rx_bytes = session->handshake_metrics_priv.rx_bytes;
+                uint32_t secs = session->handshake_metrics.end_time.tv_sec - session->handshake_metrics.start_time.tv_sec;
+                uint32_t nsecs = session->handshake_metrics.end_time.tv_nsec - session->handshake_metrics.start_time.tv_nsec;
+
+                metrics.duration_us = secs * 1000000 + nsecs / 1000;
+                metrics.tx_bytes = session->handshake_metrics.tx_bytes;
+                metrics.rx_bytes = session->handshake_metrics.rx_bytes;
         }
 
         return metrics;
@@ -1177,8 +1215,12 @@ void asl_free_session(asl_session* session)
         if (session != NULL)
         {
                 if (session->wolfssl_session != NULL)
-                {
                         wolfSSL_free(session->wolfssl_session);
+
+                if (session->ephemeral_crypto_session.initialized == true)
+                {
+                         wc_Pkcs11Token_Final(&session->ephemeral_crypto_session.token);
+                         wc_CryptoCb_UnRegisterDevice(session->ephemeral_crypto_session.device_id);
                 }
 
                 free(session);
@@ -1197,27 +1239,23 @@ void asl_free_endpoint(asl_endpoint* endpoint)
                 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
                         wc_Pkcs11Token_Final(&endpoint->long_term_crypto_module.token);
                         wc_Pkcs11_Finalize(&endpoint->long_term_crypto_module.device);
+                        wc_CryptoCb_UnRegisterDevice(endpoint->long_term_crypto_module.device_id);
                 #endif
                 }
                 if (endpoint->ephemeral_crypto_module.initialized == true)
                 {
                 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                        wc_Pkcs11Token_Final(&endpoint->ephemeral_crypto_module.token);
                         wc_Pkcs11_Finalize(&endpoint->ephemeral_crypto_module.device);
                 #endif
                 }
 
                 /* Free the WolfSSL context */
                 if (endpoint->wolfssl_context != NULL)
-                {
                         wolfSSL_CTX_free(endpoint->wolfssl_context);
-                }
 
         #if defined(HAVE_SECRET_CALLBACK)
                 if (endpoint->keylog_file != NULL)
-                {
                         free(endpoint->keylog_file);
-                }
         #endif
 
                 free(endpoint);
@@ -1274,12 +1312,18 @@ char const* asl_error_message(int error_code)
 /* Get the internal WolfSSL CTX object */
 WOLFSSL_CTX* asl_get_wolfssl_context(asl_endpoint* endpoint)
 {
+        if (endpoint == NULL)
+                return NULL;
+
         return endpoint->wolfssl_context;
 }
 
 /* Get the internal WolfSSL session object */
 WOLFSSL* asl_get_wolfssl_session(asl_session* session)
 {
+        if (session == NULL)
+                return NULL;
+
         return session->wolfssl_session;
 }
 
