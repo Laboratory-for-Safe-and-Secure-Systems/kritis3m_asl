@@ -101,11 +101,14 @@ int wolfssl_check_for_error(int32_t ret)
 {
 	if (ret != WOLFSSL_SUCCESS)
 	{
-		char errMsg[WOLFSSL_MAX_ERROR_SZ];
-		wolfSSL_ERR_error_string_n(ret, errMsg, sizeof(errMsg));
+		if (ret < WOLFSSL_FAILURE)
+		{
+			char errMsg[WOLFSSL_MAX_ERROR_SZ];
+			wolfSSL_ERR_error_string_n(ret, errMsg, sizeof(errMsg));
 
-		if (log_callback != NULL)
-			log_callback(ASL_LOG_LEVEL_ERR, errMsg);
+			if (log_callback != NULL)
+				log_callback(ASL_LOG_LEVEL_ERR, errMsg);
+		}
 
 		return -1;
 	}

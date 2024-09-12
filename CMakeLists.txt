@@ -31,6 +31,7 @@ option(KRITIS3M_ASL_INTERNAL_API "Enable access to internal WolfSSL API" OFF)
 option(KRITIS3M_ASL_COMBINED_STATIC_LIB "Create a combined static library" OFF)
 
 
+# Pull in WolfSSL as dependency (either as an external library or as a subproject)
 if(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
         # Search for system-wide installed WolfSSL
         find_package(liboqs REQUIRED)

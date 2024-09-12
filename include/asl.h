@@ -96,8 +96,18 @@ typedef struct
 
         struct
         {
-                char const* long_term_crypto_module_path;
-                char const* ephemeral_crypto_module_path;
+                struct
+                {
+                        char const* path;
+                        char const* pin;
+                }
+                long_term_crypto_module;
+
+                struct
+                {
+                        char const* path;
+                }
+                ephemeral_crypto_module;
         }
         pkcs11;
 

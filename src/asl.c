@@ -52,6 +52,7 @@ struct asl_endpoint
                 Pkcs11Dev device;
                 Pkcs11Token token;
         #endif
+                char const* pin;
                 int device_id;
                 bool initialized;
         }
@@ -121,7 +122,7 @@ static int wolfssl_write_callback(WOLFSSL* session, char* buffer, int size, void
 static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
 
 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, char const* path);
+static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
 static int get_next_device_id_endpoint(void);
 static int get_next_device_id_session(void);
 #endif
@@ -278,8 +279,9 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
         default_config.no_encryption = false;
         default_config.hybrid_signature_mode = ASL_HYBRID_SIGNATURE_MODE_DEFAULT;
         default_config.key_exchange_method = ASL_KEX_DEFAULT;
-        default_config.pkcs11.long_term_crypto_module_path = NULL;
-        default_config.pkcs11.ephemeral_crypto_module_path = NULL;
+        default_config.pkcs11.long_term_crypto_module.path = NULL;
+        default_config.pkcs11.long_term_crypto_module.pin = NULL;
+        default_config.pkcs11.ephemeral_crypto_module.path = NULL;
         default_config.device_certificate_chain.buffer = NULL;
         default_config.device_certificate_chain.size = 0;
         default_config.private_key.buffer = NULL;
@@ -334,31 +336,41 @@ int asl_init(asl_configuration const* config)
 
 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
 
-/* Configure a PKCS11 module for an endpoint.
+/* Configure the PKCS11 long-term crypto module for an endpoint.
  *
  * Returns 0 on success, negative error code on failure (error message is logged to the console).
  */
-static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, char const* path)
+static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config)
 {
         int ret = 0;
 
-        if ((endpoint == NULL) || (path == NULL))
+        if ((endpoint == NULL) || (config == NULL))
                 return ASL_ARGUMENT_ERROR;
 
         /* Load the PKCS#11 module library */
         if (endpoint->long_term_crypto_module.initialized == false)
         {
-                asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module from %s", path);
+                asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module from %s",
+                        config->pkcs11.long_term_crypto_module.path);
 
                 /* Initialize the PKCS#11 library */
-                ret = wc_Pkcs11_Initialize(&endpoint->long_term_crypto_module.device, path, wolfssl_heap);
+                ret = wc_Pkcs11_Initialize(&endpoint->long_term_crypto_module.device,
+                                           config->pkcs11.long_term_crypto_module.path,
+                                           wolfssl_heap);
                 if (ret != 0)
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 library: %d", ret);
 
+                /* Check if a PIN is provided */
+                int pin_length = 0;
+                if (config->pkcs11.long_term_crypto_module.pin != NULL)
+                        pin_length = strlen(config->pkcs11.long_term_crypto_module.pin);
+
                 /* Initialize the token */
-                ret = wc_Pkcs11Token_Init_NoLogin(&endpoint->long_term_crypto_module.token,
-                                                  &endpoint->long_term_crypto_module.device,
-                                                  -1, NULL);
+                ret = wc_Pkcs11Token_Init(&endpoint->long_term_crypto_module.token,
+                                          &endpoint->long_term_crypto_module.device,
+                                          -1, NULL,
+                                          config->pkcs11.long_term_crypto_module.pin,
+                                          pin_length);
                 if (ret != 0)
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 token: %d", ret);
 
@@ -449,14 +461,14 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         }
 
         /* Initialize the PKCS#11 module for ephemeral crypto usage */
-        if (config->pkcs11.ephemeral_crypto_module_path != NULL)
+        if (config->pkcs11.ephemeral_crypto_module.path != NULL)
         {
                 asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module from %s",
-                        config->pkcs11.ephemeral_crypto_module_path);
+                        config->pkcs11.ephemeral_crypto_module.path);
 
                 /* Initialize the PKCS#11 library */
                 ret = wc_Pkcs11_Initialize(&endpoint->ephemeral_crypto_module.device,
-                                           config->pkcs11.ephemeral_crypto_module_path,
+                                           config->pkcs11.ephemeral_crypto_module.path,
                                            wolfssl_heap);
                 if (ret != 0)
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 library: %d", ret);
@@ -475,8 +487,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         endpoint->long_term_crypto_module.device_id = get_next_device_id_endpoint();
 
                         /* Initialize the PKCS#11 module */
-                        ret = wolfssl_configure_pkcs11_endpoint(endpoint,
-                                                                config->pkcs11.long_term_crypto_module_path);
+                        ret = wolfssl_configure_pkcs11_endpoint(endpoint, config);
                         if (ret != 0)
                                 ERROR_OUT(ASL_PKCS11_ERROR, "Failed to configure long-term crypto module");
 
@@ -518,8 +529,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                                 endpoint->long_term_crypto_module.device_id = get_next_device_id_endpoint();
 
                         /* Initialize the PKCS#11 module */
-                        ret = wolfssl_configure_pkcs11_endpoint(endpoint,
-                                                                config->pkcs11.long_term_crypto_module_path);
+                        ret = wolfssl_configure_pkcs11_endpoint(endpoint, config);
                         if (ret != 0)
                                 ERROR_OUT(ASL_PKCS11_ERROR, "Failed to configure long-term crypto module");
 
