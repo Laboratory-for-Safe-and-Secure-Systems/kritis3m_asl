@@ -636,22 +636,24 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         /* Configure the available curves for Key Exchange. For the server, all are allowed to
          * support various clients. */
         int wolfssl_key_exchange_curves[] = {
-                WOLFSSL_ECC_SECP256R1,
-                WOLFSSL_ECC_SECP384R1,
-                WOLFSSL_ECC_SECP521R1,
-                WOLFSSL_ECC_X25519,
-                WOLFSSL_ECC_X448,
-                WOLFSSL_KYBER_LEVEL1,
-                WOLFSSL_KYBER_LEVEL3,
-                WOLFSSL_KYBER_LEVEL5,
-                WOLFSSL_P256_KYBER_LEVEL1,
-                WOLFSSL_P384_KYBER_LEVEL3,
                 WOLFSSL_P521_KYBER_LEVEL5,
                 WOLFSSL_P384_KYBER_LEVEL5,
-                WOLFSSL_X25519_KYBER_LEVEL1,
+                WOLFSSL_KYBER_LEVEL5,
+                WOLFSSL_ECC_SECP521R1,
+
                 WOLFSSL_X448_KYBER_LEVEL3,
+                WOLFSSL_P384_KYBER_LEVEL3,
                 WOLFSSL_X25519_KYBER_LEVEL3,
                 WOLFSSL_P256_KYBER_LEVEL3,
+                WOLFSSL_KYBER_LEVEL3,
+                WOLFSSL_ECC_X448,
+                WOLFSSL_ECC_SECP384R1,
+
+                WOLFSSL_X25519_KYBER_LEVEL1,
+                WOLFSSL_P256_KYBER_LEVEL1,
+                WOLFSSL_KYBER_LEVEL1,
+                WOLFSSL_ECC_X25519,
+                WOLFSSL_ECC_SECP256R1,
         };
         ret = wolfSSL_CTX_set_groups(new_endpoint->wolfssl_context, wolfssl_key_exchange_curves,
                                      sizeof(wolfssl_key_exchange_curves) / sizeof(int));
