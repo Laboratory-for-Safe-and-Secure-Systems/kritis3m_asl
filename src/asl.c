@@ -1,7 +1,16 @@
 
 #include <stdlib.h>
 #include <errno.h>
+
+#if defined(_WIN32)
+
+#include <winsock2.h>
+
+#else
+
 #include <sys/socket.h>
+
+#endif
 
 #include "asl.h"
 #include "asl_logging.h"
@@ -117,8 +126,10 @@ static int dev_id_counter_session = 0;
 
 
 /* Internal method declarations */
+#if defined(WOLFSSL_USER_IO)
 static int wolfssl_read_callback(WOLFSSL* session, char* buffer, int size, void* ctx);
 static int wolfssl_write_callback(WOLFSSL* session, char* buffer, int size, void* ctx);
+#endif
 static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
 
 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
@@ -128,6 +139,7 @@ static int get_next_device_id_session(void);
 #endif
 
 
+#if defined(WOLFSSL_USER_IO)
 static int wolfssl_read_callback(WOLFSSL* wolfssl, char* buffer, int size, void* ctx)
 {
         int socket = wolfSSL_get_fd(wolfssl);
@@ -141,11 +153,20 @@ static int wolfssl_read_callback(WOLFSSL* wolfssl, char* buffer, int size, void*
         }
         else if (ret < 0)
         {
-                int error = errno;
+                int error;
+        #ifdef _WIN32
+                error = WSAGetLastError();
+                if (error == WSAEWOULDBLOCK)
+                        return WOLFSSL_CBIO_ERR_WANT_READ;
+                else
+                        return WOLFSSL_CBIO_ERR_GENERAL;
+        #else
+                error = errno;
                 if ((error == EAGAIN) || (error == EWOULDBLOCK))
                         return WOLFSSL_CBIO_ERR_WANT_READ;
                 else
                         return WOLFSSL_CBIO_ERR_GENERAL;
+        #endif
         }
 
         /* Update handshake metrics */
@@ -166,13 +187,25 @@ static int wolfssl_write_callback(WOLFSSL* wolfssl, char* buffer, int size, void
 
         if (ret < 0)
         {
-                int error = errno;
-                if ((error == EAGAIN) || (error == EWOULDBLOCK))
+                int error;
+        #ifdef _WIN32
+                error = WSAGetLastError();
+                if (error == WSAEWOULDBLOCK)
                         return WOLFSSL_CBIO_ERR_WANT_WRITE;
                 else if (error == ECONNRESET)
                         return WOLFSSL_CBIO_ERR_CONN_RST;
                 else
                         return WOLFSSL_CBIO_ERR_GENERAL;
+        #else
+                error = errno;
+
+                if ((error == EAGAIN) || (error == EWOULDBLOCK))
+                        return WOLFSSL_CBIO_ERR_WANT_WRITE;
+                else if (error == ECONNRESET)
+                         return WOLFSSL_CBIO_ERR_CONN_RST;
+                else
+                        return WOLFSSL_CBIO_ERR_GENERAL;
+        #endif
         }
 
         /* Update handshake metrics */
@@ -183,7 +216,7 @@ static int wolfssl_write_callback(WOLFSSL* wolfssl, char* buffer, int size, void
 
         return ret;
 }
-
+#endif /* WOLFSSL_USER_IO */
 
 #if defined(HAVE_SECRET_CALLBACK)
 /* Callback function for TLS v1.3 secrets for use with Wireshark */
@@ -463,6 +496,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         /* Initialize the PKCS#11 module for ephemeral crypto usage */
         if (config->pkcs11.ephemeral_crypto_module.path != NULL)
         {
+        #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
                 asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module from %s",
                         config->pkcs11.ephemeral_crypto_module.path);
 
@@ -474,6 +508,9 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 library: %d", ret);
 
                 endpoint->ephemeral_crypto_module.initialized = true;
+        #else
+                ERROR_OUT(ASL_PKCS11_ERROR, "PKCS#11 support is not compiled in, please compile with support enabled");
+        #endif
         }
 
         /* Load the private key */
@@ -569,8 +606,10 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
 #endif
 
         /* Set the IO callbacks for send and receive */
+#if defined(WOLFSSL_USER_IO)
         wolfSSL_CTX_SetIORecv(endpoint->wolfssl_context, wolfssl_read_callback);
         wolfSSL_CTX_SetIOSend(endpoint->wolfssl_context, wolfssl_write_callback);
+#endif
 
         /* Configure peer authentification */
         int verify_mode = WOLFSSL_VERIFY_NONE;
@@ -881,6 +920,7 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
         /* Initialize PKCS#11 module for ephemeral crypto */
         if (endpoint->ephemeral_crypto_module.initialized == true)
         {
+        #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
                 new_session->ephemeral_crypto_session.device_id = get_next_device_id_session();
 
                 /* Initialize the token */
@@ -912,6 +952,10 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
 
                 wolfSSL_SetDevId(new_session->wolfssl_session,
                                  new_session->ephemeral_crypto_session.device_id);
+
+        #else
+                ERROR_OUT(ASL_PKCS11_ERROR, "PKCS#11 support is not compiled in, please compile with support enabled");
+        #endif
         }
 
 
@@ -923,14 +967,16 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
         /* Store the socket fd */
         wolfSSL_set_fd(new_session->wolfssl_session, socket_fd);
 
+#if defined(WOLFSSL_USER_IO)
         /* Store a pointer to our session object to get access to the metrics from
          * the read and write callback. This must be done AFTER the call to
          * wolfSSL_set_fd() as this method overwrites the ctx variables.
          */
         wolfSSL_SetIOReadCtx(new_session->wolfssl_session, new_session);
         wolfSSL_SetIOWriteCtx(new_session->wolfssl_session, new_session);
+#endif
 
-#ifdef HAVE_SECRET_CALLBACK
+#if defined(HAVE_SECRET_CALLBACK)
         if (endpoint->keylog_file != NULL)
         {
                 /* required for getting random used */
@@ -1231,8 +1277,10 @@ void asl_free_session(asl_session* session)
 
                 if (session->ephemeral_crypto_session.initialized == true)
                 {
+                #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
                          wc_Pkcs11Token_Final(&session->ephemeral_crypto_session.token);
                          wc_CryptoCb_UnRegisterDevice(session->ephemeral_crypto_session.device_id);
+                #endif
                 }
 
                 free(session);

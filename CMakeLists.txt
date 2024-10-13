@@ -7,6 +7,9 @@ include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Necessary to allow FetchContent_Populate
+cmake_policy(SET CMP0169 OLD)
+
 
 # Options
 
