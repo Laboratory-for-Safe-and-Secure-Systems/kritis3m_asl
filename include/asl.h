@@ -12,6 +12,30 @@
 #define PKCS11_LABEL_IDENTIFIER_LEN 7
 
 
+/* Properly set the API visibility */
+#if defined(BUILDING_KRITIS3M_ASL)
+    #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || defined(_WIN32_WCE)
+        #if defined(BUILDING_KRITIS3M_ASL_SHARED)
+            #define KRITIS3M_ASL_API __declspec(dllexport)
+        #else
+            #define KRITIS3M_ASL_API
+        #endif
+    #else
+        #define KRITIS3M_ASL_API
+    #endif
+#else /* BUILDING_KRITIS3M_ASL */
+    #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || defined(_WIN32_WCE)
+        #if defined(BUILDING_KRITIS3M_ASL_SHARED)
+            #define KRITIS3M_ASL_API __declspec(dllimport)
+        #else
+            #define KRITIS3M_ASL_API
+        #endif
+    #else
+        #define KRITIS3M_ASL_API
+    #endif
+#endif /* BUILDING_KRITIS3M_ASL */
+
+
 /* Error types of the library */
 enum ASL_ERROR_CODES
 {
@@ -37,8 +61,8 @@ enum ASL_LOG_LEVEL
 };
 
 
-/* Function pointer type for custom logging callbacks. */
-typedef void (*asl_custom_log_callback)(int32_t level, char const* message);
+/* Function pointer type fo logging callbacks. */
+typedef void (*asl_log_callback_t)(int32_t level, char const* message);
 
 
 /* Data structure for the library configuration */
@@ -46,7 +70,7 @@ typedef struct
 {
         bool logging_enabled;
         int32_t log_level;
-        asl_custom_log_callback custom_log_callback;
+        asl_log_callback_t log_callback;
 }
 asl_configuration;
 
@@ -160,11 +184,11 @@ asl_handshake_metrics;
 
 
 /* Create the default config for the Agile Security Library (asl). */
-asl_configuration asl_default_config(void);
+KRITIS3M_ASL_API asl_configuration asl_default_config(void);
 
 
 /* Create the default config for an asl endpoint. */
-asl_endpoint_configuration asl_default_endpoint_config(void);
+KRITIS3M_ASL_API asl_endpoint_configuration asl_default_endpoint_config(void);
 
 
 /* Initialize the Agile Security Library (asl).
@@ -174,7 +198,7 @@ asl_endpoint_configuration asl_default_endpoint_config(void);
  * Returns ASL_SUCCESS on success, negative error code in case of an error
  * (error message is logged to the console).
  */
-int asl_init(asl_configuration const* config);
+KRITIS3M_ASL_API int asl_init(asl_configuration const* config);
 
 
 /* Enable/disable logging infrastructure.
@@ -183,16 +207,16 @@ int asl_init(asl_configuration const* config);
  *
  * Returns ASL_SUCCESS on success, negative error code in case of an error.
  */
-int asl_enable_logging(bool enable);
+KRITIS3M_ASL_API int asl_enable_logging(bool enable);
 
 
 /* Set a custom logging callback.
  *
- * Parameter is a function pointer to the custom logging callback.
+ * Parameter is a function pointer to the logging callback.
  *
  * Returns ASL_SUCCESS on success, negative error code in case of an error.
  */
-int asl_set_custom_log_callback(asl_custom_log_callback new_callback);
+KRITIS3M_ASL_API int asl_set_log_callback(asl_log_callback_t new_callback);
 
 
 /* Update the log level.
@@ -201,7 +225,7 @@ int asl_set_custom_log_callback(asl_custom_log_callback new_callback);
  *
  * Returns ASL_SUCCESS on success, negative error code in case of an error.
  */
-int asl_set_log_level(int32_t new_log_level);
+KRITIS3M_ASL_API int asl_set_log_level(int32_t new_log_level);
 
 
 /* Setup a TLS server endpoint.
@@ -211,7 +235,7 @@ int asl_set_log_level(int32_t new_log_level);
  * Return value is a pointer to the newly created endpoint or NULL in case of an error
  * (error message is logged to the console).
  */
-asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config);
+KRITIS3M_ASL_API asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config);
 
 
 /* Setup a TLS client endpoint.
@@ -221,7 +245,7 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
  * Return value is a pointer to the newly created endpoint or NULL in case of an error
  * (error message is logged to the console).
  */
-asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config);
+KRITIS3M_ASL_API asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config);
 
 
 /* Create a new session for the endpoint.
@@ -232,7 +256,7 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
  * Return value is a pointer to the newly created session or NULL in case of an error
  * (error message is logged to the console).
  */
-asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd);
+KRITIS3M_ASL_API asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd);
 
 
 /* Perform the TLS handshake for a newly created session.
@@ -241,7 +265,7 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd);
  * the console). In case the handshake is not done yet and you have to call the method again
  * when new data from the peer is present, ASL_WANT_READ is returned.
  */
-int asl_handshake(asl_session* session);
+KRITIS3M_ASL_API int asl_handshake(asl_session* session);
 
 
 /* Receive new data from the TLS peer.
@@ -251,7 +275,7 @@ int asl_handshake(asl_session* session);
  * to decode the TLS record, ASL_WANT_READ is returned. In that case, you have to call
  * the method again when new data from the peer is present.
  */
-int asl_receive(asl_session* session, uint8_t* buffer, int max_size);
+KRITIS3M_ASL_API int asl_receive(asl_session* session, uint8_t* buffer, int max_size);
 
 
 /* Send data to the TLS remote peer.
@@ -261,27 +285,27 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size);
  * indicating that you have to call the method again (with the same data!) once the socket is
  * writable again.
  */
-int asl_send(asl_session* session, uint8_t const* buffer, int size);
+KRITIS3M_ASL_API int asl_send(asl_session* session, uint8_t const* buffer, int size);
 
 
 /* Get metics of the handshake. */
-asl_handshake_metrics asl_get_handshake_metrics(asl_session* session);
+KRITIS3M_ASL_API asl_handshake_metrics asl_get_handshake_metrics(asl_session* session);
 
 
 /* Close the connection of the active session */
-void asl_close_session(asl_session* session);
+KRITIS3M_ASL_API void asl_close_session(asl_session* session);
 
 
 /* Free ressources of a session. */
-void asl_free_session(asl_session* session);
+KRITIS3M_ASL_API void asl_free_session(asl_session* session);
 
 
 /* Free ressources of an endpoint. */
-void asl_free_endpoint(asl_endpoint* endpoint);
+KRITIS3M_ASL_API void asl_free_endpoint(asl_endpoint* endpoint);
 
 
 /* Print human-readable error message */
-char const* asl_error_message(int error_code);
+KRITIS3M_ASL_API char const* asl_error_message(int error_code);
 
 
 
@@ -292,16 +316,16 @@ char const* asl_error_message(int error_code);
 #include "wolfssl/ssl.h"
 
 /* Get the internal WolfSSL CTX object */
-WOLFSSL_CTX* asl_get_wolfssl_context(asl_endpoint* endpoint);
+KRITIS3M_ASL_API WOLFSSL_CTX* asl_get_wolfssl_context(asl_endpoint* endpoint);
 
 /* Get the internal WolfSSL session object */
-WOLFSSL* asl_get_wolfssl_session(asl_session* session);
+KRITIS3M_ASL_API WOLFSSL* asl_get_wolfssl_session(asl_session* session);
 
 #endif
 
 
 /* Cleanup any library resources */
-void asl_cleanup(void);
+KRITIS3M_ASL_API void asl_cleanup(void);
 
 
 #endif /* AGILE_SECURITY_LIBRARY_H */

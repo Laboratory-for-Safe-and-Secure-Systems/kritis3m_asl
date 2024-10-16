@@ -131,6 +131,7 @@ static int wolfssl_read_callback(WOLFSSL* session, char* buffer, int size, void*
 static int wolfssl_write_callback(WOLFSSL* session, char* buffer, int size, void* ctx);
 #endif
 static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
+static int take_timestamp(struct timespec* ts);
 
 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
 static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
@@ -219,6 +220,34 @@ static int wolfssl_write_callback(WOLFSSL* wolfssl, char* buffer, int size, void
 }
 #endif /* WOLFSSL_USER_IO */
 
+
+#if defined(_WIN32) && defined(_MSC_VER)
+
+#include <winsock2.h>
+
+static int take_timestamp(struct timespec* ts)
+{
+        __int64 wintime;
+
+        GetSystemTimeAsFileTime((FILETIME*)&wintime);
+
+        wintime      -=116444736000000000i64;  //1jan1601 to 1jan1970
+        ts->tv_sec    =wintime / 10000000i64;           //seconds
+        ts->tv_nsec   =wintime % 10000000i64 * 100;      //nano-seconds
+
+        return 0;
+}
+
+#else
+
+static int take_timestamp(struct timespec* ts)
+{
+        return clock_gettime(CLOCK_MONOTONIC, ts);
+}
+
+#endif
+
+
 #if defined(HAVE_SECRET_CALLBACK)
 /* Callback function for TLS v1.3 secrets for use with Wireshark */
 static int wolfssl_secret_callback(WOLFSSL* ssl, int id, const uint8_t* secret,
@@ -298,7 +327,7 @@ asl_configuration asl_default_config(void)
 
         default_config.logging_enabled = true;
         default_config.log_level = ASL_LOG_LEVEL_WRN;
-        default_config.custom_log_callback = NULL;
+        default_config.log_callback = NULL;
 
         return default_config;
 }
@@ -342,7 +371,7 @@ int asl_init(asl_configuration const* config)
         int ret = 0;
 
         /* Configure the logging interface */
-        asl_set_custom_log_callback(config->custom_log_callback);
+        asl_set_log_callback(config->log_callback);
         asl_enable_logging(config->logging_enabled);
         asl_set_log_level(config->log_level);
 
@@ -1022,25 +1051,6 @@ cleanup:
 }
 
 
-// #ifdef _WIN32
-
-// static int clock_gettime(int dummy, struct timespec *spec)
-// {
-//         (void)dummy;
-//         __int64 wintime;
-
-//         GetSystemTimeAsFileTime((FILETIME*)&wintime);
-
-//         wintime      -=116444736000000000i64;  //1jan1601 to 1jan1970
-//         spec->tv_sec  =wintime / 10000000i64;           //seconds
-//         spec->tv_nsec =wintime % 10000000i64 * 100;      //nano-seconds
-
-//         return 0;
-// }
-// #define CLOCK_MONOTONIC 0
-
-// #endif
-
 /* Perform the TLS handshake for a newly created session.
  *
  * Returns ASL_SUCCESS on success, negative error code on failure (error message is logged to
@@ -1060,8 +1070,7 @@ int asl_handshake(asl_session* session)
                 session->state = CONNECTION_STATE_HANDSHAKE;
 
                 /* Get start time */
-                if (clock_gettime(CLOCK_MONOTONIC,
-                                  &session->handshake_metrics.start_time) != 0)
+                if (take_timestamp(&session->handshake_metrics.start_time) != 0)
                         asl_log(ASL_LOG_LEVEL_WRN, "Error starting handshake timer");
         }
 
@@ -1074,8 +1083,7 @@ int asl_handshake(asl_session* session)
                         session->state = CONNECTION_STATE_CONNECTED;
 
                         /* Get end time */
-                        if (clock_gettime(CLOCK_MONOTONIC,
-                                        &session->handshake_metrics.end_time) != 0)
+                        if (take_timestamp(&session->handshake_metrics.end_time) != 0)
                                 asl_log(ASL_LOG_LEVEL_WRN, "Error stopping handshake timer");
 
                 #ifdef HAVE_SECRET_CALLBACK

@@ -123,6 +123,14 @@ target_include_directories(kritis3m_asl PRIVATE
 # Link against WolfSSL
 target_link_libraries(kritis3m_asl PRIVATE wolfssl)
 
+# Add a preprocessor definition to indicate that we are building the library
+# This is required to distinguish between building the library and using it
+# in an application within the header files.
+target_compile_definitions(kritis3m_asl PRIVATE "BUILDING_KRITIS3M_ASL")
+if(BUILD_SHARED_LIBS)
+    target_compile_definitions(kritis3m_asl PUBLIC "BUILDING_KRITIS3M_ASL_SHARED")
+endif()
+
 
 if(KRITIS3M_ASL_PKCS11_CRYPTO)
         target_link_libraries(wolfpkcs11 PRIVATE wolfssl)
@@ -131,14 +139,30 @@ endif()
 
 
 # Install library and header files
-install(TARGETS kritis3m_asl EXPORT kritis3m_asl-export DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/asl_config.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl)
+install(TARGETS kritis3m_asl
+        EXPORT kritis3m_asl-export
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/asl_config.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl
+)
 
 # Install CMake configuration files so other CMake projects can find this library
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/kritis3m_asl-config.cmake DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/kritis3m_asl)
-install(EXPORT kritis3m_asl-export DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/kritis3m_asl FILE kritis3m_asl-export.cmake)
-export(EXPORT kritis3m_asl-export FILE kritis3m_asl-export.cmake)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/kritis3m_asl-config.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/kritis3m_asl
+)
+install(EXPORT kritis3m_asl-export
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/kritis3m_asl
+        FILE kritis3m_asl-export.cmake
+)
+export(EXPORT kritis3m_asl-export
+       FILE kritis3m_asl-export.cmake
+)
 
 # Generate pkg-config file
 configure_file(
@@ -146,16 +170,26 @@ configure_file(
         ${CMAKE_CURRENT_BINARY_DIR}/kritis3m_asl.pc
         @ONLY
 )
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/kritis3m_asl.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/kritis3m_asl.pc
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+)
 
 
 # When internal API access is enabled, install the WolfSSL headers
 if(KRITIS3M_ASL_INTERNAL_API AND NOT KRITIS3M_ASL_EXTERNAL_WOLFSSL)
         # Install the internal WolfSSL header files
-        install(DIRECTORY ${wolfssl_SOURCE_DIR}/wolfssl/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl/wolfssl)
-        install(DIRECTORY ${wolfssl_BINARY_DIR}/wolfssl/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl/wolfssl)
-        install(FILES ${kritis3m_wolfssl_SOURCE_DIR}/user_settings.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl)
-        install(DIRECTORY ${liboqs_BINARY_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl)
+        install(DIRECTORY ${wolfssl_SOURCE_DIR}/wolfssl/
+                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl/wolfssl
+        )
+        install(DIRECTORY ${wolfssl_BINARY_DIR}/wolfssl/
+                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl/wolfssl
+        )
+        install(FILES ${kritis3m_wolfssl_SOURCE_DIR}/user_settings.h
+                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl
+        )
+        install(DIRECTORY ${liboqs_BINARY_DIR}/include/
+                DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/kritis3m_asl
+        )
 endif()
 
 

@@ -11,7 +11,7 @@
 
 /* Internal logging variables */
 static int32_t log_level = ASL_LOG_LEVEL_ERR;
-static asl_custom_log_callback log_callback = NULL;
+static asl_log_callback_t log_callback = NULL;
 static bool log_enabled = false;
 
 /* Internal method declarations */
@@ -51,7 +51,7 @@ int asl_enable_logging(bool enable)
  *
  * Returns ASL_SUCCESS on success, negative error code in case of an error.
  */
-int asl_set_custom_log_callback(asl_custom_log_callback new_callback)
+int asl_set_log_callback(asl_log_callback_t new_callback)
 {
 	/* Update the internal pointer to the callback. */
 	if (new_callback != NULL)
