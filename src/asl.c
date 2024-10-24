@@ -649,6 +649,31 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         }
         wolfSSL_CTX_set_verify(endpoint->wolfssl_context, verify_mode, NULL);
 
+#ifdef WOLFSSL_DUAL_ALG_CERTS
+        /* Set the preference for verfication of hybrid signatures. If the user has not
+         * specified a preference, we default to the WolfSSL internal default handling. */
+        if (config->hybrid_signature_mode != ASL_HYBRID_SIGNATURE_MODE_DEFAULT)
+        {
+                uint8_t cks = WOLFSSL_CKS_SIGSPEC_BOTH;
+                switch (config->hybrid_signature_mode)
+                {
+                        case ASL_HYBRID_SIGNATURE_MODE_NATIVE:
+                                cks = WOLFSSL_CKS_SIGSPEC_NATIVE;
+                                break;
+                        case ASL_HYBRID_SIGNATURE_MODE_ALTERNATIVE:
+                                cks = WOLFSSL_CKS_SIGSPEC_ALTERNATE_4;
+                                break;
+                        case ASL_HYBRID_SIGNATURE_MODE_BOTH:
+                        default:
+                                cks = WOLFSSL_CKS_SIGSPEC_BOTH;
+                                break;
+                };
+                ret = wolfSSL_CTX_UseVerifyCKS(endpoint->wolfssl_context, &cks, sizeof(cks));
+                if (wolfssl_check_for_error(ret))
+                        ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure hybrid signature verification");
+        }
+#endif
+
         return ASL_SUCCESS;
 
 cleanup:
@@ -737,21 +762,6 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
                                 "TLS13-AES256-GCM-SHA384:TLS13-SHA384-SHA384");
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
-
-#ifdef WOLFSSL_DUAL_ALG_CERTS
-        /* Set the preference for verfication of hybrid signatures to be for both the
-         * native and alternative chains.
-         */
-        static uint8_t cks_order[] = {
-            WOLFSSL_CKS_SIGSPEC_BOTH,
-            WOLFSSL_CKS_SIGSPEC_NATIVE,
-            WOLFSSL_CKS_SIGSPEC_ALTERNATIVE
-        };
-
-        ret = wolfSSL_CTX_UseCKS(new_endpoint->wolfssl_context, cks_order, sizeof(cks_order));
-        if (wolfssl_check_for_error(ret))
-                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure hybrid signature verification");
-#endif
 
         return new_endpoint;
 
@@ -906,31 +916,6 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context, cipher_list);
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
-
-#ifdef WOLFSSL_DUAL_ALG_CERTS
-        /* Set the preference for verfication of hybrid signatures. If the user has not
-         * specified a preference, we default to BOTH. */
-        static uint8_t cks[] = {WOLFSSL_CKS_SIGSPEC_BOTH};
-        if (config->hybrid_signature_mode != ASL_HYBRID_SIGNATURE_MODE_DEFAULT)
-        {
-                switch (config->hybrid_signature_mode)
-                {
-                        case ASL_HYBRID_SIGNATURE_MODE_NATIVE:
-                                cks[0] = WOLFSSL_CKS_SIGSPEC_NATIVE;
-                                break;
-                        case ASL_HYBRID_SIGNATURE_MODE_ALTERNATIVE:
-                                cks[0] = WOLFSSL_CKS_SIGSPEC_ALTERNATIVE;
-                                break;
-                        case ASL_HYBRID_SIGNATURE_MODE_BOTH:
-                        default:
-                                cks[0] = WOLFSSL_CKS_SIGSPEC_BOTH;
-                                break;
-                };
-        }
-        ret = wolfSSL_CTX_UseCKS(new_endpoint->wolfssl_context, cks, sizeof(cks));
-        if (wolfssl_check_for_error(ret))
-                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure hybrid signature verification");
-#endif
 
         return new_endpoint;
 
