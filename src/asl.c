@@ -432,7 +432,7 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoin
                 ret = wc_Pkcs11Token_Init(&endpoint->long_term_crypto_module.token,
                                           &endpoint->long_term_crypto_module.device,
                                           -1, NULL,
-                                          config->pkcs11.long_term_crypto_module.pin,
+                                          (uint8_t const * const)config->pkcs11.long_term_crypto_module.pin,
                                           pin_length);
                 if (ret != 0)
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 token: %d", ret);
