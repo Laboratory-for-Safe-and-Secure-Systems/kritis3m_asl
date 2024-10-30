@@ -731,18 +731,18 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
          * support various clients. */
         int wolfssl_key_exchange_curves[] = {
                 WOLFSSL_P521_KYBER_LEVEL5,
-                WOLFSSL_P384_KYBER_LEVEL5,
                 WOLFSSL_KYBER_LEVEL5,
                 WOLFSSL_ECC_SECP521R1,
 
+                WOLFSSL_P384_KYBER_LEVEL5,
                 WOLFSSL_X448_KYBER_LEVEL3,
                 WOLFSSL_P384_KYBER_LEVEL3,
                 WOLFSSL_X25519_KYBER_LEVEL3,
-                WOLFSSL_P256_KYBER_LEVEL3,
                 WOLFSSL_KYBER_LEVEL3,
                 WOLFSSL_ECC_X448,
                 WOLFSSL_ECC_SECP384R1,
 
+                WOLFSSL_P256_KYBER_LEVEL3,
                 WOLFSSL_X25519_KYBER_LEVEL1,
                 WOLFSSL_P256_KYBER_LEVEL1,
                 WOLFSSL_KYBER_LEVEL1,
@@ -827,18 +827,18 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
                 WOLFSSL_P384_KYBER_LEVEL3, // Default
 
                 WOLFSSL_P521_KYBER_LEVEL5,
-                WOLFSSL_P384_KYBER_LEVEL5,
                 WOLFSSL_KYBER_LEVEL5,
                 WOLFSSL_ECC_SECP521R1,
 
+                WOLFSSL_P384_KYBER_LEVEL5,
                 WOLFSSL_X448_KYBER_LEVEL3,
                 WOLFSSL_P384_KYBER_LEVEL3,
                 WOLFSSL_X25519_KYBER_LEVEL3,
-                WOLFSSL_P256_KYBER_LEVEL3,
                 WOLFSSL_KYBER_LEVEL3,
                 WOLFSSL_ECC_X448,
                 WOLFSSL_ECC_SECP384R1,
 
+                WOLFSSL_P256_KYBER_LEVEL3,
                 WOLFSSL_X25519_KYBER_LEVEL1,
                 WOLFSSL_P256_KYBER_LEVEL1,
                 WOLFSSL_KYBER_LEVEL1,
