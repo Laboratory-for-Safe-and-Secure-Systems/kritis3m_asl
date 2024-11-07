@@ -121,8 +121,6 @@ struct asl_session
 #define DEVICE_ID_MAX_ENDPOINT 1000
 #define DEVICE_ID_OFFSET_SESSION DEVICE_ID_MAX_ENDPOINT
 #define DEVICE_ID_MAX_SESSION 10000
-static int dev_id_counter_endpoint = 0;
-static int dev_id_counter_session = 0;
 
 
 /* Internal method declarations */
@@ -137,6 +135,9 @@ static int take_timestamp(struct timespec* ts);
 static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
 static int get_next_device_id_endpoint(void);
 static int get_next_device_id_session(void);
+
+static int dev_id_counter_endpoint = 0;
+static int dev_id_counter_session = 0;
 #endif
 
 
