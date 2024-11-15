@@ -7,6 +7,8 @@ include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+enable_language(C ASM)
+
 # Necessary to allow FetchContent_Populate
 if(POLICY CMP0169)
         cmake_policy(SET CMP0169 OLD)
@@ -47,6 +49,10 @@ endif()
 
 # Pull in WolfSSL as dependency (either as an external library or as a subproject)
 if(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
+        # Search for system-wide installed libraries in both lib and lib64 paths
+        set(FIND_LIBRARY_USE_LIB32_PATHS TRUE)
+        set(FIND_LIBRARY_USE_LIB64_PATHS TRUE)
+
         # Search for system-wide installed WolfSSL
         find_package(liboqs REQUIRED)
         find_package(wolfssl REQUIRED)
