@@ -41,6 +41,9 @@ option(KRITIS3M_ASL_INTERNAL_API "Enable access to internal WolfSSL API" OFF)
 option(KRITIS3M_ASL_COMBINED_STATIC_LIB "Create a combined static library" OFF)
 
 
+# Make sure all libraries are installed in the lib directory (not lib64)
+set(CMAKE_INSTALL_LIBDIR "lib")
+
 if(KRITIS3M_ASL_PKCS11_CRYPTO)
         # WolfPKCS11 needs shared libraries
         set(BUILD_SHARED_LIBS ON)
