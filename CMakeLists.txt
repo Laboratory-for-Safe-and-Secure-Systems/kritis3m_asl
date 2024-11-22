@@ -34,6 +34,10 @@ option(KRITIS3M_ASL_ENABLE_PKCS11 "Enable PKCS11 support" ON)
 # Enable PKCS11 crypto
 option(KRITIS3M_ASL_PKCS11_CRYPTO "Use a PKCS11 library for crypto operations" ON)
 
+# Enable support for the PQC signature algorithm FALCON (FN-DSA) via the additional
+# library liboqs. When disabled, the library will not be built.
+option(KRITIS3M_ASL_ENABLE_FALCON "Enable FALCON (FN-DSA) signature algorithm" ON)
+
 # Enable direct access to the WolfSSL API
 option(KRITIS3M_ASL_INTERNAL_API "Enable access to internal WolfSSL API" OFF)
 
@@ -57,7 +61,9 @@ if(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
         set(FIND_LIBRARY_USE_LIB64_PATHS TRUE)
 
         # Search for system-wide installed WolfSSL
-        find_package(liboqs REQUIRED)
+        if(KRITIS3M_ASL_ENABLE_FALCON)
+                find_package(liboqs REQUIRED)
+        endif()
         find_package(wolfssl REQUIRED)
 
 else(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
@@ -71,6 +77,7 @@ else(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
 
         # Configuration
         set(KRITIS3M_WOLFSSL_STANDALONE ${KRITIS3M_ASL_STANDALONE})
+        set(KRITIS3M_WOLFSSL_ENABLE_FALCON ${KRITIS3M_ASL_ENABLE_FALCON})
 
         # Actually add the external repositories to our project
         FetchContent_GetProperties(kritis3m_wolfssl)
@@ -203,7 +210,7 @@ endif()
 
 
 # Create combined static library that includes all dependencies
-if (NOT BUILD_SHARED_LIBS AND KRITIS3M_ASL_COMBINED_STATIC_LIB)
+if (NOT BUILD_SHARED_LIBS AND KRITIS3M_ASL_COMBINED_STATIC_LIB AND KRITIS3M_WOLFSSL_ENABLE_FALCON)
         set(LIBNAME "libkritis3m_asl_full.a")
         set(WOLFSSL_TARGET_NAME "wolfssl")
         set(LIBOQS_TARGET_NAME "oqs")
