@@ -144,7 +144,7 @@ target_link_libraries(kritis3m_asl PRIVATE wolfssl)
 # in an application within the header files.
 target_compile_definitions(kritis3m_asl PRIVATE "BUILDING_KRITIS3M_ASL")
 if(BUILD_SHARED_LIBS)
-    target_compile_definitions(kritis3m_asl PUBLIC "BUILDING_KRITIS3M_ASL_SHARED")
+        target_compile_definitions(kritis3m_asl PUBLIC "BUILDING_KRITIS3M_ASL_SHARED")
 endif()
 
 
@@ -169,15 +169,22 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/asl_config.h
 )
 
 # Install CMake configuration files so other CMake projects can find this library
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/kritis3m_asl-config.cmake
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/kritis3m_asl
-)
 install(EXPORT kritis3m_asl-export
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/kritis3m_asl
         FILE kritis3m_asl-export.cmake
 )
 export(EXPORT kritis3m_asl-export
        FILE kritis3m_asl-export.cmake
+)
+include(CMakePackageConfigHelpers)
+configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/kritis3m_asl-config.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/kritis3m_asl-config.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/kritis3m_asl
+        NO_SET_AND_CHECK_MACRO
+        NO_CHECK_REQUIRED_COMPONENTS_MACRO
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/kritis3m_asl-config.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/kritis3m_asl
 )
 
 # Generate pkg-config file

@@ -1,0 +1,3 @@
+@PACKAGE_INIT@
+
+include ("${CMAKE_CURRENT_LIST_DIR}/kritis3m_asl-export.cmake" )
