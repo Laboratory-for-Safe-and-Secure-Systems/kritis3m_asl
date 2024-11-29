@@ -418,11 +418,14 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoin
                         config->pkcs11.long_term_crypto_module.path);
 
                 /* Initialize the PKCS#11 library */
-                ret = wc_Pkcs11_Initialize(&endpoint->long_term_crypto_module.device,
-                                           config->pkcs11.long_term_crypto_module.path,
-                                           wolfssl_heap);
+                int pkcs11_version = WC_PCKS11VERSION_3_2;
+                ret = wc_Pkcs11_Initialize_ex(&endpoint->long_term_crypto_module.device,
+                                              config->pkcs11.long_term_crypto_module.path,
+                                              wolfssl_heap, &pkcs11_version, "PKCS 11", NULL);
                 if (ret != 0)
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 library: %d", ret);
+                if (pkcs11_version != WC_PCKS11VERSION_3_2)
+                        asl_log(ASL_LOG_LEVEL_WRN, "No PQC capable PKCS#11 version: %d", pkcs11_version);
 
                 /* Check if a PIN is provided */
                 int pin_length = 0;
@@ -532,11 +535,14 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         config->pkcs11.ephemeral_crypto_module.path);
 
                 /* Initialize the PKCS#11 library */
-                ret = wc_Pkcs11_Initialize(&endpoint->ephemeral_crypto_module.device,
-                                           config->pkcs11.ephemeral_crypto_module.path,
-                                           wolfssl_heap);
+                int pkcs11_version = WC_PCKS11VERSION_3_2;
+                ret = wc_Pkcs11_Initialize_ex(&endpoint->ephemeral_crypto_module.device,
+                                              config->pkcs11.ephemeral_crypto_module.path,
+                                              wolfssl_heap, &pkcs11_version, "PKCS 11", NULL);
                 if (ret != 0)
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 library: %d", ret);
+                if (pkcs11_version != WC_PCKS11VERSION_3_2)
+                        asl_log(ASL_LOG_LEVEL_WRN, "No PQC capable PKCS#11 version: %d", pkcs11_version);
 
                 endpoint->ephemeral_crypto_module.initialized = true;
         #else
