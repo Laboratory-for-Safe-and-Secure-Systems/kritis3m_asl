@@ -254,25 +254,27 @@ static int take_timestamp(struct timespec* ts)
 static int wolfssl_secret_callback(WOLFSSL* ssl, int id, const uint8_t* secret,
                                        int secretSz, void* ctx)
 {
+        /* In case of an error, we abort silently to make sure the handshake
+         * is not aborted. */
+
         int i;
         const char* str = NULL;
-        uint8_t serverRandom[32];
-        int serverRandomSz;
-        FILE* fp = stderr;
-        if (ctx)
-        {
-                fp = fopen((const char*)ctx, "a");
-                if (fp == NULL)
-                        return BAD_FUNC_ARG;
-        }
+        uint8_t random[32];
+        int randomSz;
+        FILE* fp = NULL;
 
-        serverRandomSz = (int)wolfSSL_get_client_random(ssl, serverRandom,
-                                                        sizeof(serverRandom));
+        if (ctx == NULL)
+                goto done;
 
-        if (serverRandomSz <= 0)
-        {
-                return BAD_FUNC_ARG;
-        }
+        /* Open keylog file */
+        fp = fopen((const char*)ctx, "a");
+        if (fp == NULL)
+                goto done;
+
+        /* Get Client random (for both client and server roles) */
+        randomSz = (int)wolfSSL_get_client_random(ssl, random, sizeof(random));
+        if (randomSz <= 0)
+                goto done;
 
         switch (id)
         {
@@ -302,19 +304,24 @@ static int wolfssl_secret_callback(WOLFSSL* ssl, int id, const uint8_t* secret,
                         break;
         }
 
+        /* Write random */
         fprintf(fp, "%s ", str);
-        for (i = 0; i < (int)serverRandomSz; i++)
+        for (i = 0; i < (int)randomSz; i++)
         {
-                fprintf(fp, "%02x", serverRandom[i]);
+                fprintf(fp, "%02x", random[i]);
         }
         fprintf(fp, " ");
+
+        /* Write secret */
         for (i = 0; i < secretSz; i++)
         {
                 fprintf(fp, "%02x", secret[i]);
         }
         fprintf(fp, "\n");
 
-        fclose(fp);
+done:
+        if (fp != NULL)
+                fclose(fp);
 
         return 0;
 }
@@ -408,13 +415,13 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoin
 {
         int ret = 0;
 
-        if ((endpoint == NULL) || (config == NULL))
+        if ((endpoint == NULL) || (config == NULL) || (config->pkcs11.long_term_crypto_module.path == NULL))
                 return ASL_ARGUMENT_ERROR;
 
         /* Load the PKCS#11 module library */
         if (endpoint->long_term_crypto_module.initialized == false)
         {
-                asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module from %s",
+                asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module from \"%s\"",
                         config->pkcs11.long_term_crypto_module.path);
 
                 /* Initialize the PKCS#11 library */
@@ -1022,7 +1029,7 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
 #endif
 
 #if defined(HAVE_SECRET_CALLBACK)
-        if (endpoint->keylog_file != NULL)
+        if (endpoint->keylog_file != NULL && *endpoint->keylog_file != '\0')
         {
                 /* required for getting random used */
                 wolfSSL_KeepArrays(new_session->wolfssl_session);
