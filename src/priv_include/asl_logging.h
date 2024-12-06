@@ -1,8 +1,8 @@
 #ifndef ASL_LOGGING_H
 #define ASL_LOGGING_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 /* Internal logging methods used within the library */
