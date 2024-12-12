@@ -3,13 +3,9 @@
 #include <stdlib.h>
 
 #if defined(_WIN32)
-
         #include <winsock2.h>
-
 #else
-
         #include <sys/socket.h>
-
 #endif
 
 #include "asl.h"
@@ -60,15 +56,8 @@ struct asl_endpoint
                 char const* pin;
                 int device_id;
                 bool initialized;
-        } long_term_crypto_module;
 
-        struct
-        {
-#ifdef HAVE_PKCS11
-                Pkcs11Dev device;
-#endif
-                bool initialized;
-        } ephemeral_crypto_module;
+        } pkcs11_module;
 
 #if defined(HAVE_SECRET_CALLBACK)
         char* keylog_file;
@@ -83,19 +72,11 @@ struct asl_session
 
         struct
         {
-#ifdef HAVE_PKCS11
-                Pkcs11Token token;
-#endif
-                int device_id;
-                bool initialized;
-        } ephemeral_crypto_session;
-
-        struct
-        {
                 struct timespec start_time;
                 struct timespec end_time;
                 uint32_t tx_bytes;
                 uint32_t rx_bytes;
+
         } handshake_metrics;
 };
 
@@ -334,9 +315,9 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
         default_config.no_encryption = false;
         default_config.hybrid_signature_mode = ASL_HYBRID_SIGNATURE_MODE_DEFAULT;
         default_config.key_exchange_method = ASL_KEX_DEFAULT;
-        default_config.pkcs11.long_term_crypto_module.path = NULL;
-        default_config.pkcs11.long_term_crypto_module.pin = NULL;
-        default_config.pkcs11.ephemeral_crypto_module.path = NULL;
+        default_config.pkcs11.module_path = NULL;
+        default_config.pkcs11.module_pin = NULL;
+        default_config.pkcs11.use_for_all = false;
         default_config.device_certificate_chain.buffer = NULL;
         default_config.device_certificate_chain.size = 0;
         default_config.private_key.buffer = NULL;
@@ -401,21 +382,20 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint,
 {
         int ret = 0;
 
-        if ((endpoint == NULL) || (config == NULL) ||
-            (config->pkcs11.long_term_crypto_module.path == NULL))
+        if ((endpoint == NULL) || (config == NULL) || (config->pkcs11.module_path == NULL))
                 return ASL_ARGUMENT_ERROR;
 
         /* Load the PKCS#11 module library */
-        if (endpoint->long_term_crypto_module.initialized == false)
+        if (endpoint->pkcs11_module.initialized == false)
         {
                 asl_log(ASL_LOG_LEVEL_INF,
                         "Initializing PKCS#11 module from \"%s\"",
-                        config->pkcs11.long_term_crypto_module.path);
+                        config->pkcs11.module_path);
 
                 /* Initialize the PKCS#11 library */
                 int pkcs11_version = WC_PCKS11VERSION_3_2;
-                ret = wc_Pkcs11_Initialize_ex(&endpoint->long_term_crypto_module.device,
-                                              config->pkcs11.long_term_crypto_module.path,
+                ret = wc_Pkcs11_Initialize_ex(&endpoint->pkcs11_module.device,
+                                              config->pkcs11.module_path,
                                               wolfssl_heap,
                                               &pkcs11_version,
                                               "PKCS 11",
@@ -427,37 +407,36 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint,
 
                 /* Check if a PIN is provided */
                 int pin_length = 0;
-                if (config->pkcs11.long_term_crypto_module.pin != NULL)
-                        pin_length = strlen(config->pkcs11.long_term_crypto_module.pin);
+                if (config->pkcs11.module_pin != NULL)
+                        pin_length = strlen(config->pkcs11.module_pin);
 
                 /* Initialize the token */
-                ret = wc_Pkcs11Token_Init(&endpoint->long_term_crypto_module.token,
-                                          &endpoint->long_term_crypto_module.device,
+                ret = wc_Pkcs11Token_Init(&endpoint->pkcs11_module.token,
+                                          &endpoint->pkcs11_module.device,
                                           -1,
                                           NULL,
-                                          (uint8_t const* const)
-                                                  config->pkcs11.long_term_crypto_module.pin,
+                                          (uint8_t const* const) config->pkcs11.module_pin,
                                           pin_length);
                 if (ret != 0)
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 token: %d", ret);
 
                 /* Register the device with WolfSSL */
-                ret = wc_CryptoCb_RegisterDevice(endpoint->long_term_crypto_module.device_id,
+                ret = wc_CryptoCb_RegisterDevice(endpoint->pkcs11_module.device_id,
                                                  wc_Pkcs11_CryptoDevCb,
-                                                 &endpoint->long_term_crypto_module.token);
+                                                 &endpoint->pkcs11_module.token);
                 if (ret != 0)
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to register PKCS#11 callback: %d", ret);
 
                 /* Create a persistent session with the secure element */
-                ret = wc_Pkcs11Token_Open(&endpoint->long_term_crypto_module.token, 1);
+                ret = wc_Pkcs11Token_Open(&endpoint->pkcs11_module.token, 1);
                 if (ret == 0)
                 {
-                        endpoint->long_term_crypto_module.initialized = true;
+                        endpoint->pkcs11_module.initialized = true;
                         asl_log(ASL_LOG_LEVEL_INF, "PKCS#11 module initialized");
                 }
                 else
                 {
-                        endpoint->long_term_crypto_module.initialized = false;
+                        endpoint->pkcs11_module.initialized = false;
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to open PKCS#11 token: %d", ret);
                 }
         }
@@ -465,8 +444,8 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint,
         return 0;
 
 cleanup:
-        wc_Pkcs11Token_Final(&endpoint->long_term_crypto_module.token);
-        wc_Pkcs11_Finalize(&endpoint->long_term_crypto_module.device);
+        wc_Pkcs11Token_Final(&endpoint->pkcs11_module.token);
+        wc_Pkcs11_Finalize(&endpoint->pkcs11_module.device);
 
         return ret;
 }
@@ -526,33 +505,6 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         ERROR_OUT(ASL_CERTIFICATE_ERROR, "Unable to load device certificate chain");
         }
 
-        /* Initialize the PKCS#11 module for ephemeral crypto usage */
-        if (config->pkcs11.ephemeral_crypto_module.path != NULL)
-        {
-#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                asl_log(ASL_LOG_LEVEL_INF,
-                        "Initializing PKCS#11 module from %s",
-                        config->pkcs11.ephemeral_crypto_module.path);
-
-                /* Initialize the PKCS#11 library */
-                int pkcs11_version = WC_PCKS11VERSION_3_2;
-                ret = wc_Pkcs11_Initialize_ex(&endpoint->ephemeral_crypto_module.device,
-                                              config->pkcs11.ephemeral_crypto_module.path,
-                                              wolfssl_heap,
-                                              &pkcs11_version,
-                                              "PKCS 11",
-                                              NULL);
-                if (ret != 0)
-                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 library: %d", ret);
-                if (pkcs11_version != WC_PCKS11VERSION_3_2)
-                        asl_log(ASL_LOG_LEVEL_WRN, "No PQC capable PKCS#11 version: %d", pkcs11_version);
-
-                endpoint->ephemeral_crypto_module.initialized = true;
-#else
-                ERROR_OUT(ASL_PKCS11_ERROR, "PKCS#11 support is not compiled in, please compile with support enabled");
-#endif
-        }
-
         /* Load the private key */
         bool privateKeyLoaded = false;
         if (config->private_key.buffer != NULL)
@@ -562,7 +514,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                        endpoint->long_term_crypto_module.device_id = get_next_device_id_endpoint();
+                        endpoint->pkcs11_module.device_id = get_next_device_id_endpoint();
 
                         /* Initialize the PKCS#11 module */
                         ret = wolfssl_configure_pkcs11_endpoint(endpoint, config);
@@ -578,7 +530,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         ret = wolfSSL_CTX_use_PrivateKey_Label(endpoint->wolfssl_context,
                                                                (char const*) config->private_key.buffer +
                                                                        PKCS11_LABEL_IDENTIFIER_LEN,
-                                                               endpoint->long_term_crypto_module.device_id);
+                                                               endpoint->pkcs11_module.device_id);
 #else
                         ERROR_OUT(ASL_PKCS11_ERROR, "Secure element support is not compiled in, please compile with support enabled");
 #endif
@@ -606,8 +558,8 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
         #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                        if (endpoint->long_term_crypto_module.device_id == INVALID_DEVID)
-                                endpoint->long_term_crypto_module.device_id = get_next_device_id_endpoint();
+                        if (endpoint->pkcs11_module.device_id == INVALID_DEVID)
+                                endpoint->pkcs11_module.device_id = get_next_device_id_endpoint();
 
                         /* Initialize the PKCS#11 module */
                         ret = wolfssl_configure_pkcs11_endpoint(endpoint, config);
@@ -624,7 +576,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         ret = wolfSSL_CTX_use_AltPrivateKey_Label(endpoint->wolfssl_context,
                                                                   (char const*) config->private_key.additional_key_buffer +
                                                                           PKCS11_LABEL_IDENTIFIER_LEN,
-                                                                  endpoint->long_term_crypto_module.device_id);
+                                                                  endpoint->pkcs11_module.device_id);
         #else
                         ERROR_OUT(ASL_PKCS11_ERROR, "Secure element support is not compiled in, please compile with support enabled");
         #endif
@@ -719,9 +671,8 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         if (new_endpoint == NULL)
                 ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL endpoint");
 
-        new_endpoint->long_term_crypto_module.initialized = false;
-        new_endpoint->ephemeral_crypto_module.initialized = false;
-        new_endpoint->long_term_crypto_module.device_id = INVALID_DEVID;
+        new_endpoint->pkcs11_module.initialized = false;
+        new_endpoint->pkcs11_module.device_id = INVALID_DEVID;
 
 #if defined(HAVE_SECRET_CALLBACK)
         if (config->keylog_file != NULL)
@@ -811,9 +762,8 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         if (new_endpoint == NULL)
                 ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL endpoint");
 
-        new_endpoint->long_term_crypto_module.initialized = false;
-        new_endpoint->ephemeral_crypto_module.initialized = false;
-        new_endpoint->long_term_crypto_module.device_id = INVALID_DEVID;
+        new_endpoint->pkcs11_module.initialized = false;
+        new_endpoint->pkcs11_module.device_id = INVALID_DEVID;
 
 #if defined(HAVE_SECRET_CALLBACK)
         if (config->keylog_file != NULL)
@@ -968,55 +918,11 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
                 ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL session");
 
         new_session->state = CONNECTION_STATE_NOT_CONNECTED;
-        new_session->ephemeral_crypto_session.initialized = false;
-        new_session->ephemeral_crypto_session.device_id = INVALID_DEVID;
 
         /* Create a new TLS session */
         new_session->wolfssl_session = wolfSSL_new(endpoint->wolfssl_context);
         if (new_session->wolfssl_session == NULL)
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to create a new WolfSSL session");
-
-        /* Initialize PKCS#11 module for ephemeral crypto */
-        if (endpoint->ephemeral_crypto_module.initialized == true)
-        {
-#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                new_session->ephemeral_crypto_session.device_id = get_next_device_id_session();
-
-                /* Initialize the token */
-                ret = wc_Pkcs11Token_Init_NoLogin(&new_session->ephemeral_crypto_session.token,
-                                                  &endpoint->ephemeral_crypto_module.device,
-                                                  -1,
-                                                  NULL);
-                if (ret != 0)
-                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to initialize PKCS#11 token: %d", ret);
-
-                /* Register the device with WolfSSL */
-                ret = wc_CryptoCb_RegisterDevice(new_session->ephemeral_crypto_session.device_id,
-                                                 wc_Pkcs11_CryptoDevCb,
-                                                 &new_session->ephemeral_crypto_session.token);
-                if (ret != 0)
-                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to register PKCS#11 callback: %d", ret);
-
-                /* Create a persistent session with the secure element */
-                ret = wc_Pkcs11Token_Open(&new_session->ephemeral_crypto_session.token, 1);
-                if (ret == 0)
-                {
-                        new_session->ephemeral_crypto_session.initialized = true;
-                        asl_log(ASL_LOG_LEVEL_INF, "PKCS#11 module initialized");
-                }
-                else
-                {
-                        new_session->ephemeral_crypto_session.initialized = false;
-                        ERROR_OUT(ASL_PKCS11_ERROR, "Unable to open PKCS#11 token: %d", ret);
-                }
-
-                wolfSSL_SetDevId(new_session->wolfssl_session,
-                                 new_session->ephemeral_crypto_session.device_id);
-
-#else
-                ERROR_OUT(ASL_PKCS11_ERROR, "PKCS#11 support is not compiled in, please compile with support enabled");
-#endif
-        }
 
         /* Initialize the remaining attributes */
         new_session->state = CONNECTION_STATE_NOT_CONNECTED;
@@ -1330,14 +1236,6 @@ void asl_free_session(asl_session* session)
                 if (session->wolfssl_session != NULL)
                         wolfSSL_free(session->wolfssl_session);
 
-                if (session->ephemeral_crypto_session.initialized == true)
-                {
-#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                        wc_Pkcs11Token_Final(&session->ephemeral_crypto_session.token);
-                        wc_CryptoCb_UnRegisterDevice(session->ephemeral_crypto_session.device_id);
-#endif
-                }
-
                 free(session);
         }
 }
@@ -1348,18 +1246,12 @@ void asl_free_endpoint(asl_endpoint* endpoint)
         if (endpoint != NULL)
         {
                 /* Properly cleanup PKCS#11 stuff */
-                if (endpoint->long_term_crypto_module.initialized == true)
+                if (endpoint->pkcs11_module.initialized == true)
                 {
 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                        wc_Pkcs11Token_Final(&endpoint->long_term_crypto_module.token);
-                        wc_Pkcs11_Finalize(&endpoint->long_term_crypto_module.device);
-                        wc_CryptoCb_UnRegisterDevice(endpoint->long_term_crypto_module.device_id);
-#endif
-                }
-                if (endpoint->ephemeral_crypto_module.initialized == true)
-                {
-#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                        wc_Pkcs11_Finalize(&endpoint->ephemeral_crypto_module.device);
+                        wc_Pkcs11Token_Final(&endpoint->pkcs11_module.token);
+                        wc_Pkcs11_Finalize(&endpoint->pkcs11_module.device);
+                        wc_CryptoCb_UnRegisterDevice(endpoint->pkcs11_module.device_id);
 #endif
                 }
 

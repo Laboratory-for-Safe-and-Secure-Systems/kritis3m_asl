@@ -110,22 +110,17 @@ typedef struct
 
         struct
         {
-                struct
-                {
-                        char const* path;
-                        char const* pin;
-                } long_term_crypto_module;
+                char const* module_path;
+                char const* module_pin;
+                bool use_for_all;
 
-                struct
-                {
-                        char const* path;
-                } ephemeral_crypto_module;
         } pkcs11;
 
         struct
         {
                 uint8_t const* buffer;
                 size_t size;
+
         } device_certificate_chain;
 
         struct
@@ -136,15 +131,18 @@ typedef struct
                 /* Additional key in case of hybrid signatures */
                 uint8_t const* additional_key_buffer;
                 size_t additional_key_size;
+
         } private_key;
 
         struct
         {
                 uint8_t const* buffer;
                 size_t size;
+
         } root_certificate;
 
         char const* keylog_file;
+
 } asl_endpoint_configuration;
 
 /* Data structure for an endpoint (definition is hidden in source file) */

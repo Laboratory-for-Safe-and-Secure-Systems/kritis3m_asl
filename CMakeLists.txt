@@ -31,9 +31,6 @@ option(KRITIS3M_ASL_EXTERNAL_WOLFSSL "Use external WolfSSL library" OFF)
 # Enable PKCS11 support in WolfSSL
 option(KRITIS3M_ASL_ENABLE_PKCS11 "Enable PKCS11 support" ON)
 
-# Enable PKCS11 crypto
-option(KRITIS3M_ASL_PKCS11_CRYPTO "Use a PKCS11 library for crypto operations" ON)
-
 # Enable support for the PQC signature algorithm FALCON (FN-DSA) via the additional
 # library liboqs. When disabled, the library will not be built.
 option(KRITIS3M_ASL_ENABLE_FALCON "Enable FALCON (FN-DSA) signature algorithm" ON)
@@ -47,11 +44,6 @@ option(KRITIS3M_ASL_COMBINED_STATIC_LIB "Create a combined static library" OFF)
 
 # Make sure all libraries are installed in the lib directory (not lib64)
 set(CMAKE_INSTALL_LIBDIR "lib")
-
-if(KRITIS3M_ASL_PKCS11_CRYPTO)
-        # WolfPKCS11 needs shared libraries
-        set(BUILD_SHARED_LIBS ON)
-endif()
 
 
 # Pull in WolfSSL as dependency (either as an external library or as a subproject)
@@ -92,28 +84,6 @@ else(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
 endif(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
 
 
-# Pull wolfPKCS11 as dependency when required
-if(KRITIS3M_ASL_PKCS11_CRYPTO)
-        FetchContent_Declare(wolfpkcs11
-                GIT_REPOSITORY          git@github.com:Laboratory-for-Safe-and-Secure-Systems/wolfPKCS11.git
-                GIT_TAG                 origin/development
-                GIT_PROGRESS            TRUE
-                USES_TERMINAL_DOWNLOAD  TRUE
-        )
-
-        # Actually add the external repositories to our project
-        FetchContent_GetProperties(wolfpkcs11)
-        if(NOT wolfpkcs11_POPULATED)
-                FetchContent_Populate(wolfpkcs11)
-                if(KRITIS3M_ASL_STANDALONE)
-                        add_subdirectory(${wolfpkcs11_SOURCE_DIR} ${wolfpkcs11_BINARY_DIR})
-                else()
-                        add_subdirectory(${wolfpkcs11_SOURCE_DIR} ${wolfpkcs11_BINARY_DIR} EXCLUDE_FROM_ALL)
-                endif()
-        endif()
-endif()
-
-
 # Write the configuration into a file
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/priv_include/asl_config.h.in asl_config.h)
 
@@ -145,12 +115,6 @@ target_link_libraries(kritis3m_asl PRIVATE wolfssl)
 target_compile_definitions(kritis3m_asl PRIVATE "BUILDING_KRITIS3M_ASL")
 if(BUILD_SHARED_LIBS)
         target_compile_definitions(kritis3m_asl PUBLIC "BUILDING_KRITIS3M_ASL_SHARED")
-endif()
-
-
-if(KRITIS3M_ASL_PKCS11_CRYPTO)
-        target_link_libraries(wolfpkcs11 PRIVATE wolfssl)
-        add_dependencies(kritis3m_asl wolfpkcs11)
 endif()
 
 
