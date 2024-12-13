@@ -1205,12 +1205,11 @@ asl_handshake_metrics asl_get_handshake_metrics(asl_session* session)
 
         if (session != NULL)
         {
-                uint32_t secs = session->handshake_metrics.end_time.tv_sec -
-                                session->handshake_metrics.start_time.tv_sec;
-                uint32_t nsecs = session->handshake_metrics.end_time.tv_nsec -
-                                 session->handshake_metrics.start_time.tv_nsec;
+                struct timespec* start_time = &session->handshake_metrics.start_time;
+                struct timespec* end_time = &session->handshake_metrics.end_time;
 
-                metrics.duration_us = secs * 1000000 + nsecs / 1000;
+                metrics.duration_us = (end_time->tv_sec - start_time->tv_sec) * 1000000.0 +
+                                      (end_time->tv_nsec - start_time->tv_nsec) / 1000.0;
                 metrics.tx_bytes = session->handshake_metrics.tx_bytes;
                 metrics.rx_bytes = session->handshake_metrics.rx_bytes;
         }
