@@ -439,6 +439,12 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint,
                         endpoint->pkcs11_module.initialized = false;
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to open PKCS#11 token: %d", ret);
                 }
+
+                if (config->pkcs11.use_for_all == true)
+                {
+                        wolfSSL_CTX_SetDevId(endpoint->wolfssl_context,
+                                             endpoint->pkcs11_module.device_id);
+                }
         }
 
         return 0;
