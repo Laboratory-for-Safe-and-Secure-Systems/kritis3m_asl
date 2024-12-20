@@ -379,15 +379,18 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint,
 {
         int ret = 0;
 
-        if ((endpoint == NULL) || (config == NULL) || (config->pkcs11.module_path == NULL))
+        if ((endpoint == NULL) || (config == NULL))
                 return ASL_ARGUMENT_ERROR;
+
+#if !defined(HAVE_PKCS11_STATIC) && !defined(HAVE_PKCS11_STATIC_V3)
+        if (config->pkcs11.module_path == NULL)
+                return ASL_ARGUMENT_ERROR;
+#endif
 
         /* Load the PKCS#11 module library */
         if (endpoint->pkcs11_module.initialized == false)
         {
-                asl_log(ASL_LOG_LEVEL_INF,
-                        "Initializing PKCS#11 module from \"%s\"",
-                        config->pkcs11.module_path);
+                asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module");
 
                 /* Initialize the PKCS#11 library */
                 int pkcs11_version = WC_PCKS11VERSION_3_2;
