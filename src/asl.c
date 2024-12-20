@@ -105,10 +105,8 @@ static int take_timestamp(struct timespec* ts);
 static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint,
                                              asl_endpoint_configuration const* config);
 static int get_next_device_id_endpoint(void);
-static int get_next_device_id_session(void);
 
 static int dev_id_counter_endpoint = 0;
-static int dev_id_counter_session = 0;
 #endif
 
 #if defined(WOLFSSL_USER_IO)
@@ -462,15 +460,6 @@ static int get_next_device_id_endpoint(void)
         dev_id_counter_endpoint = (dev_id_counter_endpoint + 1) % DEVICE_ID_MAX_ENDPOINT;
 
         return current_id + DEVICE_ID_OFFSET_ENDPOINT;
-}
-
-static int get_next_device_id_session(void)
-{
-        int current_id = dev_id_counter_session;
-
-        dev_id_counter_session = (dev_id_counter_session + 1) % DEVICE_ID_MAX_SESSION;
-
-        return current_id + DEVICE_ID_OFFSET_SESSION;
 }
 
 #endif /* KRITIS3M_ASL_ENABLE_PKCS11 */

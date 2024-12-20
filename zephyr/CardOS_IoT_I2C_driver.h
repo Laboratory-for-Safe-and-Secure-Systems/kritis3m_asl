@@ -17,12 +17,14 @@
 //
 //******************************** Version ***********************************
 //*
-//* $Id: 
+//* $Id:
 //*
 //***************************************************************************
 
 #ifndef CARDOS_IOT_I2C_DRIVER_H
 #define CARDOS_IOT_I2C_DRIVER_H
+
+#include <stdint.h>
 
 #define SMARTCARDINTERFACE_ENABLE_I2C 1
 
@@ -46,7 +48,7 @@
 typedef struct _i2cParameters
 {
 	int address;
-} i2cParameters;	
+} i2cParameters;
 
 typedef struct _i2cReader
 {
@@ -64,7 +66,7 @@ uint8_t checkChecksumI2C(uint8_t *response, uint32_t responseLength);
  __attribute__((weak)) I2C_RV setupI2C(i2cParameters *i2cParams);
 
 //SPI read/write function
- __attribute__((weak)) I2C_RV I2C_RW(void *context, unsigned char *packet, int packetLength, unsigned char *response, int *responseLength);	
+ __attribute__((weak)) I2C_RV I2C_RW(void *context, unsigned char *packet, int packetLength, unsigned char *response, int *responseLength);
 
 I2C_RV getReadersI2C(i2cReader * readers);
 
