@@ -1,6 +1,7 @@
 #ifndef ASL_LOGGING_H
 #define ASL_LOGGING_H
 
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>

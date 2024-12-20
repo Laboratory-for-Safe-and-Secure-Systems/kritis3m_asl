@@ -3,9 +3,9 @@
 #include <stdlib.h>
 
 #if defined(_WIN32)
-        #include <winsock2.h>
+#include <winsock2.h>
 #else
-        #include <sys/socket.h>
+#include <sys/socket.h>
 #endif
 
 #include "asl.h"
@@ -25,7 +25,7 @@ static WOLFSSL_HEAP_HINT* wolfssl_heap;
 extern uint8_t* wolfsslMemoryBuffer;
 extern size_t wolfsslMemoryBufferSize;
 #else
-        #define wolfssl_heap NULL
+#define wolfssl_heap NULL
 #endif
 
 #define ERROR_OUT(error_code, ...)                                                                 \
@@ -127,19 +127,19 @@ static int wolfssl_read_callback(WOLFSSL* wolfssl, char* buffer, int size, void*
         else if (ret < 0)
         {
                 int error;
-        #ifdef _WIN32
+#ifdef _WIN32
                 error = WSAGetLastError();
                 if (error == WSAEWOULDBLOCK)
                         return WOLFSSL_CBIO_ERR_WANT_READ;
                 else
                         return WOLFSSL_CBIO_ERR_GENERAL;
-        #else
+#else
                 error = errno;
                 if ((error == EAGAIN) || (error == EWOULDBLOCK))
                         return WOLFSSL_CBIO_ERR_WANT_READ;
                 else
                         return WOLFSSL_CBIO_ERR_GENERAL;
-        #endif
+#endif
         }
 
         /* Update handshake metrics */
@@ -161,7 +161,7 @@ static int wolfssl_write_callback(WOLFSSL* wolfssl, char* buffer, int size, void
         if (ret < 0)
         {
                 int error;
-        #ifdef _WIN32
+#ifdef _WIN32
                 error = WSAGetLastError();
                 if (error == WSAEWOULDBLOCK)
                         return WOLFSSL_CBIO_ERR_WANT_WRITE;
@@ -169,7 +169,7 @@ static int wolfssl_write_callback(WOLFSSL* wolfssl, char* buffer, int size, void
                         return WOLFSSL_CBIO_ERR_CONN_RST;
                 else
                         return WOLFSSL_CBIO_ERR_GENERAL;
-        #else
+#else
                 error = errno;
 
                 if ((error == EAGAIN) || (error == EWOULDBLOCK))
@@ -178,7 +178,7 @@ static int wolfssl_write_callback(WOLFSSL* wolfssl, char* buffer, int size, void
                         return WOLFSSL_CBIO_ERR_CONN_RST;
                 else
                         return WOLFSSL_CBIO_ERR_GENERAL;
-        #endif
+#endif
         }
 
         /* Update handshake metrics */
@@ -193,7 +193,7 @@ static int wolfssl_write_callback(WOLFSSL* wolfssl, char* buffer, int size, void
 
 #if defined(_WIN32) && defined(_MSC_VER)
 
-        #include <winsock2.h>
+#include <winsock2.h>
 
 static int take_timestamp(struct timespec* ts)
 {
@@ -313,7 +313,6 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
 
         default_config.mutual_authentication = true;
         default_config.no_encryption = false;
-        default_config.hybrid_signature_mode = ASL_HYBRID_SIGNATURE_MODE_DEFAULT;
         default_config.key_exchange_method = ASL_KEX_DEFAULT;
         default_config.pkcs11.module_path = NULL;
         default_config.pkcs11.module_pin = NULL;
@@ -563,7 +562,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                             PKCS11_LABEL_IDENTIFIER,
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
-        #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
                         if (endpoint->pkcs11_module.device_id == INVALID_DEVID)
                                 endpoint->pkcs11_module.device_id = get_next_device_id_endpoint();
 
@@ -583,9 +582,9 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                                                                   (char const*) config->private_key.additional_key_buffer +
                                                                           PKCS11_LABEL_IDENTIFIER_LEN,
                                                                   endpoint->pkcs11_module.device_id);
-        #else
+#else
                         ERROR_OUT(ASL_PKCS11_ERROR, "Secure element support is not compiled in, please compile with support enabled");
-        #endif
+#endif
                 }
                 else
                 {
@@ -625,32 +624,6 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                 verify_mode = WOLFSSL_VERIFY_PEER | WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT;
         }
         wolfSSL_CTX_set_verify(endpoint->wolfssl_context, verify_mode, NULL);
-
-#ifdef WOLFSSL_DUAL_ALG_CERTS
-        /* Set the preference for verfication of hybrid signatures. If the user has not
-         * specified a preference, we default to the WolfSSL internal default handling. */
-        if (config->hybrid_signature_mode != ASL_HYBRID_SIGNATURE_MODE_DEFAULT)
-        {
-                uint8_t cks = WOLFSSL_CKS_SIGSPEC_BOTH;
-                switch (config->hybrid_signature_mode)
-                {
-                case ASL_HYBRID_SIGNATURE_MODE_NATIVE:
-                        cks = WOLFSSL_CKS_SIGSPEC_NATIVE;
-                        break;
-                case ASL_HYBRID_SIGNATURE_MODE_ALTERNATIVE:
-                        cks = WOLFSSL_CKS_SIGSPEC_ALTERNATE_4;
-                        break;
-                case ASL_HYBRID_SIGNATURE_MODE_BOTH:
-                default:
-                        cks = WOLFSSL_CKS_SIGSPEC_BOTH;
-                        break;
-                };
-                ret = wolfSSL_CTX_UseVerifyCKS(endpoint->wolfssl_context, &cks, sizeof(cks));
-                if (wolfssl_check_for_error(ret))
-                        ERROR_OUT(ASL_INTERNAL_ERROR,
-                                  "Failed to configure hybrid signature verification");
-        }
-#endif
 
         return ASL_SUCCESS;
 

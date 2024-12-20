@@ -12,25 +12,25 @@
 
 /* Properly set the API visibility */
 #if defined(BUILDING_KRITIS3M_ASL)
-        #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || defined(_WIN32_WCE)
-                #if defined(BUILDING_KRITIS3M_ASL_SHARED)
-                        #define KRITIS3M_ASL_API __declspec(dllexport)
-                #else
-                        #define KRITIS3M_ASL_API
-                #endif
-        #else
-                #define KRITIS3M_ASL_API
-        #endif
+#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || defined(_WIN32_WCE)
+#if defined(BUILDING_KRITIS3M_ASL_SHARED)
+#define KRITIS3M_ASL_API __declspec(dllexport)
+#else
+#define KRITIS3M_ASL_API
+#endif
+#else
+#define KRITIS3M_ASL_API
+#endif
 #else /* BUILDING_KRITIS3M_ASL */
-        #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || defined(_WIN32_WCE)
-                #if defined(BUILDING_KRITIS3M_ASL_SHARED)
-                        #define KRITIS3M_ASL_API __declspec(dllimport)
-                #else
-                        #define KRITIS3M_ASL_API
-                #endif
-        #else
-                #define KRITIS3M_ASL_API
-        #endif
+#if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || defined(_WIN32_WCE)
+#if defined(BUILDING_KRITIS3M_ASL_SHARED)
+#define KRITIS3M_ASL_API __declspec(dllimport)
+#else
+#define KRITIS3M_ASL_API
+#endif
+#else
+#define KRITIS3M_ASL_API
+#endif
 #endif /* BUILDING_KRITIS3M_ASL */
 
 /* Error types of the library */
@@ -90,22 +90,11 @@ enum asl_key_exchange_method
         ASL_KEX_HYBRID_X25519_MLKEM768,
 };
 
-/* Enum for the different modes during the handshake
- * regarding hybrid signatures. */
-enum asl_hybrid_signature_mode
-{
-        ASL_HYBRID_SIGNATURE_MODE_DEFAULT = 0,
-        ASL_HYBRID_SIGNATURE_MODE_NATIVE,
-        ASL_HYBRID_SIGNATURE_MODE_ALTERNATIVE,
-        ASL_HYBRID_SIGNATURE_MODE_BOTH,
-};
-
 /* Data structure for the endpoint configuration */
 typedef struct
 {
         bool mutual_authentication;
         bool no_encryption;
-        enum asl_hybrid_signature_mode hybrid_signature_mode;
         enum asl_key_exchange_method key_exchange_method;
 
         struct
@@ -270,8 +259,8 @@ KRITIS3M_ASL_API char const* asl_error_message(int error_code);
 /* Access to the internal WolfSSL API */
 #if defined(KRITIS3M_ASL_INTERNAL_API)
 
-        #include "wolfssl/options.h"
-        #include "wolfssl/ssl.h"
+#include "wolfssl/options.h"
+#include "wolfssl/ssl.h"
 
 /* Get the internal WolfSSL CTX object */
 KRITIS3M_ASL_API WOLFSSL_CTX* asl_get_wolfssl_context(asl_endpoint* endpoint);
