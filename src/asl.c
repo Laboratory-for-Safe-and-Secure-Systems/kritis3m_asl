@@ -482,12 +482,15 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to set minimum TLS version");
 
         /* Load root certificate */
-        ret = wolfSSL_CTX_load_verify_buffer(endpoint->wolfssl_context,
-                                             config->root_certificate.buffer,
-                                             config->root_certificate.size,
-                                             WOLFSSL_FILETYPE_PEM);
-        if (wolfssl_check_for_error(ret))
-                ERROR_OUT(ASL_CERTIFICATE_ERROR, "Unable to load root certificate");
+        if (config->root_certificate.buffer != NULL)
+        {
+                ret = wolfSSL_CTX_load_verify_buffer(endpoint->wolfssl_context,
+                                                     config->root_certificate.buffer,
+                                                     config->root_certificate.size,
+                                                     WOLFSSL_FILETYPE_PEM);
+                if (wolfssl_check_for_error(ret))
+                        ERROR_OUT(ASL_CERTIFICATE_ERROR, "Unable to load root certificate");
+        }
 
         /* Load device certificate chain */
         if (config->device_certificate_chain.buffer != NULL)
