@@ -25,10 +25,11 @@ option(BUILD_SHARED_LIBS "Build shared libraries (.so) instead of static ones (.
 # only to be linked against a wrapping application.
 option(KRITIS3M_ASL_STANDALONE "Use standalone WolfSSL" ON)
 
-# Use an externally installed WolfSSL library. If disabled, WolfSSL will be built.
+# Use an externally installed WolfSSL library via find_package(). If disabled, WolfSSL will
+# be built.
 option(KRITIS3M_ASL_EXTERNAL_WOLFSSL "Use external WolfSSL library" OFF)
 
-# Enable PKCS11 support in WolfSSL
+# Enable PKCS11 support
 option(KRITIS3M_ASL_ENABLE_PKCS11 "Enable PKCS11 support" ON)
 
 # Enable support for the PQC signature algorithm FALCON (FN-DSA) via the additional
