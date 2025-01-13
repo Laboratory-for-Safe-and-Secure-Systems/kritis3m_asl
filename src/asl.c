@@ -520,7 +520,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                         ret = wolfssl_configure_pkcs11_endpoint(endpoint, config);
                         if (ret != 0)
                                 ERROR_OUT(ASL_PKCS11_ERROR,
-                                          "Failed to configure long-term crypto module");
+                                          "Failed to configure PKCS#11 crypto module");
 
                         asl_log(ASL_LOG_LEVEL_DBG,
                                 "Using external private key with label \"%s\"",

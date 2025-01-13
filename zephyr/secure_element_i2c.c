@@ -39,18 +39,10 @@ I2C_RV setupI2C(i2cParameters* params)
         return I2C_S_SUCCESS;
 }
 
-static int initDone = 0;
-
 I2C_RV I2C_RW(void* context, unsigned char* packet, int packetLength, unsigned char* response, int* responseLength)
 {
         const struct device* const dev = DEVICE_DT_GET(DT_NODELABEL(i2c1));
         i2cParameters* params = (i2cParameters*) context;
-
-        if (initDone == 0)
-        {
-                setupI2C(params);
-                initDone = 1;
-        }
 
         // printk("main : I2C_RW\n");
 
