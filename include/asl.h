@@ -241,6 +241,17 @@ KRITIS3M_ASL_API int asl_receive(asl_session* session, uint8_t* buffer, int max_
  */
 KRITIS3M_ASL_API int asl_send(asl_session* session, uint8_t const* buffer, int size);
 
+/* Get the peer certificate (in DER encoding).
+ *
+ * The peer certificate is copied into the provided buffer. The buffer must be large enough
+ * to hold the certificate (on entry, *size must contain the buffer size). The size in bytes
+ * of the certificate is stored in *size.
+ *
+ * Returns ASL_SUCCESS on success, negative error code on failure (error message is logged
+ * to the console).
+ */
+KRITIS3M_ASL_API int asl_get_peer_certificate(asl_session* session, uint8_t* buffer, size_t* size);
+
 /* Get metics of the handshake. */
 KRITIS3M_ASL_API asl_handshake_metrics asl_get_handshake_metrics(asl_session* session);
 

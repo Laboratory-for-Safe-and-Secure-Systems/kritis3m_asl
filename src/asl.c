@@ -1173,6 +1173,54 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
         return ret;
 }
 
+/* Get the peer certificate (in DER encoding).
+ *
+ * The peer certificate is copied into the provided buffer. The buffer must be large enough
+ * to hold the certificate (on entry, *size must contain the buffer size). The size in bytes
+ * of the certificate is stored in *size.
+ *
+ * Returns ASL_SUCCESS on success, negative error code on failure (error message is logged
+ * to the console).
+ */
+int asl_get_peer_certificate(asl_session* session, uint8_t* buffer, size_t* size)
+{
+#ifdef KEEP_PEER_CERT
+        int ret = 0;
+        WOLFSSL_X509* cert = NULL;
+        uint8_t const* der_buf = NULL;
+        int der_size = 0;
+
+        if ((session == NULL) || (buffer == NULL) || (size == NULL))
+                return ASL_ARGUMENT_ERROR;
+
+        /* Get the certificate */
+        cert = wolfSSL_get_peer_certificate(session->wolfssl_session);
+        if (cert == NULL)
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to get peer certificate");
+
+        /* Get underlying buffer and size */
+        der_buf = wolfSSL_X509_get_der(cert, &der_size);
+
+        if (*size < der_size)
+                ERROR_OUT(ASL_ARGUMENT_ERROR, "Buffer too small for certificate");
+
+        /* Copy the certificate into the buffer */
+        memcpy(buffer, der_buf, der_size);
+        *size = der_size;
+
+        return ASL_SUCCESS;
+
+cleanup:
+        if (cert != NULL)
+                wolfSSL_X509_free(cert);
+
+        return ret;
+#else
+        asl_log(ASL_LOG_LEVEL_ERR, "Peer certificate retrieval is disabled");
+        return ASL_INTERNAL_ERROR;
+#endif
+}
+
 /* Get metics of the handshake. */
 asl_handshake_metrics asl_get_handshake_metrics(asl_session* session)
 {
