@@ -10,83 +10,37 @@
 #include "wolfssl/wolfcrypt/wc_pkcs11.h"
 
 /* Internal logging variables */
-static int32_t log_level = ASL_LOG_LEVEL_ERR;
-static asl_log_callback_t log_callback = NULL;
-static bool log_enabled = false;
+static int32_t asl_log_level = ASL_LOG_LEVEL_ERR;
+static asl_log_callback_t asl_log_callback = NULL;
+static bool asl_log_enabled = false;
 
 /* Internal method declarations */
 void wolfssl_logging_callback(int level, const char* str);
 void asl_default_log_callback(int32_t level, char const* message);
 
-/* Enable/disable logging infrastructure.
- *
- * Parameter is a boolean value to enable or disable logging.
- *
- * Returns ASL_SUCCESS on success, negative error code in case of an error.
- */
-int asl_enable_logging(bool enable)
+int asl_prepare_logging(asl_configuration const* config)
 {
-        log_enabled = enable;
+        asl_log_enabled = config->logging_enabled;
 
-        /* Check if we have to enable WolfSSL internal logging */
-        if (log_enabled == true && log_level == ASL_LOG_LEVEL_DBG)
-        {
-                int ret = wolfSSL_Debugging_ON();
-                if (ret != 0)
-                {
-                        asl_log(ASL_LOG_LEVEL_WRN, "Debug output is not compiled in, please compile with DEBUG_WOLFSSL preprocessor makro defined");
-                }
-        }
-        else
-                wolfSSL_Debugging_OFF();
-
-        return ASL_SUCCESS;
-}
-
-/* Set a custom logging callback.
- *
- * Parameter is a function pointer to the custom logging callback.
- *
- * Returns ASL_SUCCESS on success, negative error code in case of an error.
- */
-int asl_set_log_callback(asl_log_callback_t new_callback)
-{
-        /* Update the internal pointer to the callback. */
-        if (new_callback != NULL)
-                log_callback = new_callback;
-        else
-                log_callback = asl_default_log_callback;
-
-        wolfSSL_SetLoggingCb(wolfssl_logging_callback);
-
-        return ASL_SUCCESS;
-}
-
-/* Update the log level.
- *
- * Parameter is the new log level.
- *
- * Returns ASL_SUCCESS on success, negative error code in case of an error.
- */
-int asl_set_log_level(int32_t new_log_level)
-{
         /* Update the internal log level. */
-        if ((new_log_level >= ASL_LOG_LEVEL_ERR) && (new_log_level <= ASL_LOG_LEVEL_DBG))
-                log_level = new_log_level;
+        if ((config->log_level >= ASL_LOG_LEVEL_ERR) && (config->log_level <= ASL_LOG_LEVEL_DBG))
+                asl_log_level = config->log_level;
         else
                 return ASL_ARGUMENT_ERROR;
 
         /* Check if we have to enable WolfSSL internal logging */
-        if (log_enabled == true && log_level == ASL_LOG_LEVEL_DBG)
+        if ((asl_log_enabled == true) && (asl_log_level == ASL_LOG_LEVEL_DBG))
         {
+                wolfSSL_SetLoggingCb(wolfssl_logging_callback);
                 int ret = wolfSSL_Debugging_ON();
                 if (ret != 0)
-                {
-                        asl_log(ASL_LOG_LEVEL_WRN, "Debug output is not compiled in, please compile with DEBUG_WOLFSSL preprocessor makro defined");
-                }
+                        asl_log(ASL_LOG_LEVEL_WRN, "Debug output is not enabled, please compile with DEBUG_WOLFSSL defined");
         }
+
+        if (config->log_callback != NULL)
+                asl_log_callback = config->log_callback;
         else
-                wolfSSL_Debugging_OFF();
+                asl_log_callback = asl_default_log_callback;
 
         return ASL_SUCCESS;
 }
@@ -101,8 +55,8 @@ int wolfssl_check_for_error(int32_t ret)
                         char errMsg[WOLFSSL_MAX_ERROR_SZ];
                         wolfSSL_ERR_error_string_n(ret, errMsg, sizeof(errMsg));
 
-                        if (log_callback != NULL)
-                                log_callback(ASL_LOG_LEVEL_ERR, errMsg);
+                        if (asl_log_callback != NULL)
+                                asl_log_callback(ASL_LOG_LEVEL_ERR, errMsg);
                 }
 
                 return -1;
@@ -113,7 +67,7 @@ int wolfssl_check_for_error(int32_t ret)
 
 void asl_log(int32_t level, char const* message, ...)
 {
-        if (log_enabled == false || level > log_level)
+        if (asl_log_enabled == false || level > asl_log_level)
                 return;
 
         va_list args;
@@ -124,21 +78,21 @@ void asl_log(int32_t level, char const* message, ...)
 
         va_end(args);
 
-        if (log_callback != NULL)
-                log_callback(level, buffer);
+        if (asl_log_callback != NULL)
+                asl_log_callback(level, buffer);
 }
 
 void wolfssl_logging_callback(int level, const char* str)
 {
         (void) level;
 
-        if (log_enabled == true && log_callback != NULL)
-                log_callback(ASL_LOG_LEVEL_DBG, str);
+        if (asl_log_enabled == true && asl_log_callback != NULL)
+                asl_log_callback(ASL_LOG_LEVEL_DBG, str);
 }
 
 void asl_default_log_callback(int32_t level, char const* message)
 {
-        if (log_enabled == false || level > log_level)
+        if (asl_log_enabled == false || level > asl_log_level)
                 return;
 
         printf("%s\n", message);

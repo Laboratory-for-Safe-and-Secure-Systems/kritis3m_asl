@@ -163,30 +163,6 @@ KRITIS3M_ASL_API asl_endpoint_configuration asl_default_endpoint_config(void);
  */
 KRITIS3M_ASL_API int asl_init(asl_configuration const* config);
 
-/* Enable/disable logging infrastructure.
- *
- * Parameter is a boolean value to enable or disable logging.
- *
- * Returns ASL_SUCCESS on success, negative error code in case of an error.
- */
-KRITIS3M_ASL_API int asl_enable_logging(bool enable);
-
-/* Set a custom logging callback.
- *
- * Parameter is a function pointer to the logging callback.
- *
- * Returns ASL_SUCCESS on success, negative error code in case of an error.
- */
-KRITIS3M_ASL_API int asl_set_log_callback(asl_log_callback_t new_callback);
-
-/* Update the log level.
- *
- * Parameter is the new log level.
- *
- * Returns ASL_SUCCESS on success, negative error code in case of an error.
- */
-KRITIS3M_ASL_API int asl_set_log_level(int32_t new_log_level);
-
 /* Setup a TLS server endpoint.
  *
  * Parameter is a pointer to a filled endpoint_configuration structure.

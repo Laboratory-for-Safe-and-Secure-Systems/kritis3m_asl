@@ -340,9 +340,9 @@ int asl_init(asl_configuration const* config)
         int ret = 0;
 
         /* Configure the logging interface */
-        asl_set_log_callback(config->log_callback);
-        asl_enable_logging(config->logging_enabled);
-        asl_set_log_level(config->log_level);
+        ret = asl_prepare_logging(config);
+        if (ret != ASL_SUCCESS)
+                return ret;
 
         /* Initialize WolfSSL */
         ret = wolfSSL_Init();
