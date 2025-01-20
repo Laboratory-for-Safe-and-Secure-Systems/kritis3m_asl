@@ -450,6 +450,7 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint,
         return 0;
 
 cleanup:
+        wc_CryptoCb_UnRegisterDevice(endpoint->pkcs11_module.device_id);
         wc_Pkcs11Token_Final(&endpoint->pkcs11_module.token);
         wc_Pkcs11_Finalize(&endpoint->pkcs11_module.device);
 
