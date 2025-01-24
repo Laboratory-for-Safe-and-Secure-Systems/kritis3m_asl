@@ -1148,7 +1148,7 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
                                  * it right now. */
                                 ret = ASL_WANT_WRITE;
                         }
-                        else if (ret == WOLFSSL_ERROR_SYSCALL)
+                        else if ((ret == WOLFSSL_ERROR_SYSCALL) || (ret == SOCKET_PEER_CLOSED_E))
                         {
                                 ret = ASL_CONN_CLOSED;
                         }
