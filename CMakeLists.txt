@@ -34,7 +34,7 @@ option(KRITIS3M_ASL_ENABLE_PKCS11 "Enable PKCS11 support" ON)
 
 # Enable support for the PQC signature algorithm FALCON (FN-DSA) via the additional
 # library liboqs. When disabled, the library will not be built.
-option(KRITIS3M_ASL_ENABLE_FALCON "Enable FALCON (FN-DSA) signature algorithm" ON)
+option(KRITIS3M_ASL_ENABLE_FALCON "Enable FALCON (FN-DSA) signature algorithm" OFF)
 
 # Enable direct access to the WolfSSL API
 option(KRITIS3M_ASL_INTERNAL_API "Enable access to internal WolfSSL API" OFF)
