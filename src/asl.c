@@ -780,6 +780,11 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
                 /* Set wolfSSL internal PSK call-back (not passed to the user) */
                 wolfSSL_CTX_set_psk_server_tls13_callback(new_endpoint->wolfssl_context, wolfssl_tls13_server_cb);
                 
+                if(wolfSSL_CTX_use_psk_identity_hint(new_endpoint->wolfssl_context, "asl server") != WOLFSSL_SUCCESS)
+                {
+                        ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to set psk identity hint");
+                }
+
                 /* Set asl call-back, to reference user implementation */
                 new_endpoint->psk.psk_server_cb = config->psk.psk_server_cb;
                 
