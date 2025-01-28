@@ -327,10 +327,9 @@ static inline unsigned int wolfssl_tls13_client_cb(WOLFSSL* ssl, const char* hin
         return key_len;
 }
 
-static inline unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl, const char* hint, 
-                                                   char* identity, unsigned int id_max_len,
-                                                   unsigned char* key, unsigned int key_max_len,
-                                                   const char* ciphersuite)
+static inline unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl, const char* identity,
+                                                   unsigned char* key, unsigned int key_max_len, 
+                                                   const char** ciphersuite)
 {
         (void)key_max_len;
 
