@@ -713,7 +713,9 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
 
         /* Configure peer authentification */
         int verify_mode = WOLFSSL_VERIFY_NONE;
-        if (config->mutual_authentication == true)
+
+        /* If PSKs are used, mutual authentiation shall not be activated by default */
+        if ((config->mutual_authentication == true) && (config->psk.enable_psk == false))
         {
                 verify_mode = WOLFSSL_VERIFY_PEER | WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT;
         }
