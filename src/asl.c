@@ -64,6 +64,7 @@ struct asl_endpoint
         {
                 asl_psk_client_callback_t psk_client_cb;
                 asl_psk_server_callback_t psk_server_cb;
+                char* master_key;
         } psk;
 #endif
 
@@ -77,6 +78,7 @@ struct asl_session
 {
         WOLFSSL* wolfssl_session;
         enum connection_state state;
+        asl_endpoint* endpoint;
 
         struct
         {
@@ -301,54 +303,66 @@ done:
 #endif /* HAVE_SECRET_CALLBACK */
 
 #ifndef NO_PSK
-static inline unsigned int wolfssl_tls13_client_cb(WOLFSSL* ssl,
-                                                   const char* hint,
-                                                   char* identity,
-                                                   unsigned int id_max_len,
-                                                   unsigned char* key,
-                                                   unsigned int key_max_len,
-                                                   const char* ciphersuite)
+static unsigned int wolfssl_tls13_client_cb(WOLFSSL* ssl,
+                                            const char* hint,
+                                            char* identity,
+                                            unsigned int id_max_len,
+                                            unsigned char* key,
+                                            unsigned int key_max_len,
+                                            const char* ciphersuite)
 {
         (void) hint;
         (void) key_max_len;
         (void) id_max_len;
         (void) ciphersuite;
 
-        uint8_t key_len = 0;
+        unsigned int key_len = 0;
 
-        asl_psk_client_callback_t asl_cb = wolfSSL_get_psk_callback_ctx(ssl);
-        if (asl_cb != NULL)
+        asl_endpoint* endpoint = (asl_endpoint*) wolfSSL_get_psk_callback_ctx(ssl);
+        if (endpoint != NULL)
         {
-                key_len = asl_cb(key, identity);
+                if (endpoint->psk.psk_client_cb != NULL)
+                {
+                        key_len = endpoint->psk.psk_client_cb(key, identity);
+                }
+                else
+                {
+                        asl_log(ASL_LOG_LEVEL_ERR, "ASL PSK client callback not set!");
+                }
         }
         else
         {
-                asl_log(ASL_LOG_LEVEL_ERR, "ASL PSK client call-back not set!");
-                key_len = 0;
+                asl_log(ASL_LOG_LEVEL_ERR, "ASL endpoint pointer not set!");
         }
 
         return key_len;
 }
 
-static inline unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl,
-                                                   const char* identity,
-                                                   unsigned char* key,
-                                                   unsigned int key_max_len,
-                                                   const char** ciphersuite)
+static unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl,
+                                            const char* identity,
+                                            unsigned char* key,
+                                            unsigned int key_max_len,
+                                            const char** ciphersuite)
 {
         (void) key_max_len;
 
-        uint8_t key_len = 0;
+        unsigned int key_len = 0;
 
-        asl_psk_server_callback_t asl_cb = wolfSSL_get_psk_callback_ctx(ssl);
-        if (asl_cb != NULL)
+        asl_endpoint* endpoint = (asl_endpoint*) wolfSSL_get_psk_callback_ctx(ssl);
+        if (endpoint != NULL)
         {
-                key_len = asl_cb(key, identity, ciphersuite);
+                if (endpoint->psk.psk_server_cb != NULL)
+                {
+                        key_len = endpoint->psk.psk_server_cb(key, identity, ciphersuite);
+                }
+                else
+                {
+                        asl_log(ASL_LOG_LEVEL_ERR, "ASL PSK server callback not set!");
+                }
         }
         else
         {
-                asl_log(ASL_LOG_LEVEL_ERR, "ASL PSK server call-back function is not set!");
-                key_len = 0;
+                asl_log(ASL_LOG_LEVEL_ERR, "ASL endpoint pointer not set!");
         }
 
         return key_len;
@@ -388,6 +402,8 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
         default_config.root_certificate.size = 0;
         default_config.keylog_file = NULL;
         default_config.psk.enable_psk = false;
+        default_config.psk.use_external_callbacks = false;
+        default_config.psk.master_key = NULL;
         default_config.psk.psk_client_cb = NULL;
         default_config.psk.psk_server_cb = NULL;
 
@@ -542,11 +558,29 @@ static int get_next_device_id_endpoint(void)
  */
 static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config)
 {
+        int ret = 0;
+
         if ((endpoint == NULL) || (config == NULL))
                 return ASL_ARGUMENT_ERROR;
 
+        endpoint->pkcs11_module.initialized = false;
+        endpoint->pkcs11_module.device_id = INVALID_DEVID;
+
+#if defined(HAVE_SECRET_CALLBACK)
+        if (config->keylog_file != NULL)
+        {
+                endpoint->keylog_file = (char*) malloc(strlen(config->keylog_file) + 1);
+                if (endpoint->keylog_file == NULL)
+                        ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for keylog file name");
+
+                strcpy(endpoint->keylog_file, config->keylog_file);
+        }
+        else
+                endpoint->keylog_file = NULL;
+#endif
+
         /* Only allow TLS version 1.3 */
-        int ret = wolfSSL_CTX_SetMinVersion(endpoint->wolfssl_context, WOLFSSL_TLSV1_3);
+        ret = wolfSSL_CTX_SetMinVersion(endpoint->wolfssl_context, WOLFSSL_TLSV1_3);
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to set minimum TLS version");
 
@@ -729,6 +763,35 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         }
         wolfSSL_CTX_set_verify(endpoint->wolfssl_context, verify_mode, NULL);
 
+        /* PSK config */
+        if (config->psk.enable_psk)
+        {
+#ifndef NO_PSK
+                /* Only allow PSK together with an ephemeral key exchange */
+                wolfSSL_CTX_only_dhe_psk(endpoint->wolfssl_context);
+
+                if (config->psk.master_key != NULL)
+                {
+                        endpoint->psk.master_key = (char*) malloc(strlen(config->psk.master_key) + 1);
+                        if (endpoint->psk.master_key == NULL)
+                                ERROR_OUT(ASL_MEMORY_ERROR,
+                                          "Unable to allocate memory for PSK master key");
+
+                        strcpy(endpoint->psk.master_key, config->psk.master_key);
+                }
+                else if (config->psk.use_external_callbacks == false)
+                {
+                        ERROR_OUT(ASL_ARGUMENT_ERROR,
+                                  "Either a PSK master key or external callbacks must be used");
+                }
+                else
+                        endpoint->psk.master_key = NULL;
+#else
+                /* In case wolfSSL is not correctly built for psk applications, add log entry */
+                asl_log(ASL_LOG_LEVEL_WRN, "wolfSSL not built with PSK (--enable-psk)");
+#endif
+        }
+
         return ASL_SUCCESS;
 
 cleanup:
@@ -754,22 +817,6 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         if (new_endpoint == NULL)
                 ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL endpoint");
 
-        new_endpoint->pkcs11_module.initialized = false;
-        new_endpoint->pkcs11_module.device_id = INVALID_DEVID;
-
-#if defined(HAVE_SECRET_CALLBACK)
-        if (config->keylog_file != NULL)
-        {
-                new_endpoint->keylog_file = (char*) malloc(strlen(config->keylog_file) + 1);
-                if (new_endpoint->keylog_file == NULL)
-                        ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for keylog file name");
-
-                strcpy(new_endpoint->keylog_file, config->keylog_file);
-        }
-        else
-                new_endpoint->keylog_file = NULL;
-#endif
-
         /* Create the TLS server context */
         new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_server_method_ex(wolfssl_heap),
                                                            wolfssl_heap);
@@ -785,7 +832,7 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         if (config->psk.enable_psk)
         {
 #ifndef NO_PSK
-                /* Set wolfSSL internal PSK call-back (not passed to the user) */
+                /* Set wolfSSL internal PSK callback (not passed to the user) */
                 wolfSSL_CTX_set_psk_server_tls13_callback(new_endpoint->wolfssl_context,
                                                           wolfssl_tls13_server_cb);
 
@@ -795,14 +842,14 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
                         ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to set psk identity hint");
                 }
 
-                /* Set asl call-back, to reference user implementation */
-                new_endpoint->psk.psk_server_cb = config->psk.psk_server_cb;
+                /* Set asl callback, to reference user implementation */
+                if (config->psk.use_external_callbacks && config->psk.psk_server_cb != NULL)
+                        new_endpoint->psk.psk_server_cb = config->psk.psk_server_cb;
+                else
+                        new_endpoint->psk.psk_server_cb = NULL;
 
                 /* To avoid ambiguity, we set the PSK client callback here to NULL */
                 new_endpoint->psk.psk_client_cb = NULL;
-
-                /* Only allow PSK together with an ephemeral key exchange */
-                wolfSSL_CTX_only_dhe_psk(new_endpoint->wolfssl_context);
 #else
                 /* In case wolfSSL is not correctly built for psk applications, add log entry */
                 asl_log(ASL_LOG_LEVEL_WRN, "wolfSSL not built with PSK (--enable-psk)");
@@ -873,22 +920,6 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         if (new_endpoint == NULL)
                 ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL endpoint");
 
-        new_endpoint->pkcs11_module.initialized = false;
-        new_endpoint->pkcs11_module.device_id = INVALID_DEVID;
-
-#if defined(HAVE_SECRET_CALLBACK)
-        if (config->keylog_file != NULL)
-        {
-                new_endpoint->keylog_file = (char*) malloc(strlen(config->keylog_file) + 1);
-                if (new_endpoint->keylog_file == NULL)
-                        ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for keylog file name");
-
-                strcpy(new_endpoint->keylog_file, config->keylog_file);
-        }
-        else
-                new_endpoint->keylog_file = NULL;
-#endif
-
         /* Create the TLS client context */
         new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_client_method_ex(wolfssl_heap),
                                                            wolfssl_heap);
@@ -904,18 +935,18 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         if (config->psk.enable_psk)
         {
 #ifndef NO_PSK
-                /* Set wolfSSL internal PSK call-back (not passed to the user) */
+                /* Set wolfSSL internal PSK callback (not passed to the user) */
                 wolfSSL_CTX_set_psk_client_cs_callback(new_endpoint->wolfssl_context,
                                                        wolfssl_tls13_client_cb);
 
-                /* Set asl call-back, to reference user implementation */
-                new_endpoint->psk.psk_client_cb = config->psk.psk_client_cb;
+                /* Set asl callback, to reference user implementation */
+                if (config->psk.use_external_callbacks && config->psk.psk_client_cb != NULL)
+                        new_endpoint->psk.psk_client_cb = config->psk.psk_client_cb;
+                else
+                        new_endpoint->psk.psk_client_cb = NULL;
 
                 /* To avoid ambiguity, we set the PSK server callback here to NULL */
                 new_endpoint->psk.psk_server_cb = NULL;
-
-                /* Only allow PSK together with an ephemeral key exchange */
-                wolfSSL_CTX_only_dhe_psk(new_endpoint->wolfssl_context);
 #else
                 /* In case wolfSSL is not correctly built for psk applications, add log entry */
                 asl_log(ASL_LOG_LEVEL_WRN, "wolfSSL not built with PSK (--enable-psk)");
@@ -1050,8 +1081,6 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
         if (new_session == NULL)
                 ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL session");
 
-        new_session->state = CONNECTION_STATE_NOT_CONNECTED;
-
         /* Create a new TLS session */
         new_session->wolfssl_session = wolfSSL_new(endpoint->wolfssl_context);
         if (new_session->wolfssl_session == NULL)
@@ -1059,26 +1088,12 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
 
         /* Initialize the remaining attributes */
         new_session->state = CONNECTION_STATE_NOT_CONNECTED;
+        new_session->endpoint = endpoint;
         new_session->handshake_metrics.tx_bytes = 0;
         new_session->handshake_metrics.rx_bytes = 0;
 
 #ifndef NO_PSK
-        if (endpoint->psk.psk_client_cb != NULL)
-        {
-                /* Set client call-back reference in the WOLFSSL* ssl object */
-                wolfSSL_set_psk_callback_ctx(new_session->wolfssl_session, endpoint->psk.psk_client_cb);
-                asl_log(ASL_LOG_LEVEL_INF, "endpoint now configured as PSK client");
-        }
-        else if (endpoint->psk.psk_server_cb != NULL)
-        {
-                /* Set server call-back reference in the WOLFSSL* ssl object */
-                wolfSSL_set_psk_callback_ctx(new_session->wolfssl_session, endpoint->psk.psk_server_cb);
-                asl_log(ASL_LOG_LEVEL_INF, "endpoint now configured as PSK server");
-        }
-        else
-        {
-                ERROR_OUT(ASL_PSK_ERROR, "no callback function was set for the endpoint");
-        }
+        wolfSSL_set_psk_callback_ctx(new_session->wolfssl_session, new_session);
 #endif
 
         /* Store the socket fd */
@@ -1460,6 +1475,11 @@ void asl_free_endpoint(asl_endpoint* endpoint)
                 /* Free the WolfSSL context */
                 if (endpoint->wolfssl_context != NULL)
                         wolfSSL_CTX_free(endpoint->wolfssl_context);
+
+#ifndef NO_PSK
+                if (endpoint->psk.master_key != NULL)
+                        free(endpoint->psk.master_key);
+#endif
 
 #if defined(HAVE_SECRET_CALLBACK)
                 if (endpoint->keylog_file != NULL)

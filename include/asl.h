@@ -116,9 +116,11 @@ typedef struct
 
         struct
         {
+                char const* master_key;
                 asl_psk_client_callback_t psk_client_cb;
                 asl_psk_server_callback_t psk_server_cb;
                 bool enable_psk;
+                bool use_external_callbacks;
 
         } psk;
 
