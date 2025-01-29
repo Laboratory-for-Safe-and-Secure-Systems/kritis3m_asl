@@ -392,6 +392,8 @@ static int wolfssl_configure_pkcs11_endpoint(asl_endpoint* endpoint,
         {
                 asl_log(ASL_LOG_LEVEL_INF, "Initializing PKCS#11 module");
 
+                endpoint->pkcs11_module.device_id = get_next_device_id_endpoint();
+
                 /* Initialize the PKCS#11 library */
                 int pkcs11_version = WC_PCKS11VERSION_3_2;
                 ret = wc_Pkcs11_Initialize_ex(&endpoint->pkcs11_module.device,
@@ -496,12 +498,49 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         /* Load device certificate chain */
         if (config->device_certificate_chain.buffer != NULL)
         {
-                ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
-                                                                      config->device_certificate_chain
-                                                                              .buffer,
-                                                                      config->device_certificate_chain
-                                                                              .size,
-                                                                      WOLFSSL_FILETYPE_PEM);
+                if (strncmp((char const*) config->device_certificate_chain.buffer,
+                            PKCS11_LABEL_IDENTIFIER,
+                            PKCS11_LABEL_IDENTIFIER_LEN) == 0)
+                {
+#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+                        /* Initialize the PKCS#11 module */
+                        ret = wolfssl_configure_pkcs11_endpoint(endpoint, config);
+                        if (ret != 0)
+                                ERROR_OUT(ASL_PKCS11_ERROR,
+                                          "Failed to configure PKCS#11 crypto module");
+
+                        asl_log(ASL_LOG_LEVEL_DBG,
+                                "Using external certificate chain with label \"%s\"",
+                                (char const*) config->device_certificate_chain.buffer +
+                                        PKCS11_LABEL_IDENTIFIER_LEN);
+
+                        ret = wolfSSL_CTX_use_certificate_label(endpoint->wolfssl_context,
+                                                                config->private_key.buffer +
+                                                                        PKCS11_LABEL_IDENTIFIER_LEN,
+                                                                endpoint->pkcs11_module.device_id);
+
+                        if (wolfssl_check_for_error(ret))
+                                ERROR_OUT(ASL_CERTIFICATE_ERROR,
+                                          "Unable to load external certificate chain");
+
+                        ret = wolfSSL_CTX_use_certificate_chain_label(endpoint->wolfssl_context,
+                                                                      config->private_key.buffer +
+                                                                              PKCS11_LABEL_IDENTIFIER_LEN,
+                                                                      endpoint->pkcs11_module.device_id);
+#else
+                        ERROR_OUT(ASL_PKCS11_ERROR, "PKCS#11 support is not compiled in, please compile with support enabled");
+#endif
+                }
+                else
+                {
+                        ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
+                                                                              config->device_certificate_chain
+                                                                                      .buffer,
+                                                                              config->device_certificate_chain
+                                                                                      .size,
+                                                                              WOLFSSL_FILETYPE_PEM);
+                }
+
                 if (wolfssl_check_for_error(ret))
                         ERROR_OUT(ASL_CERTIFICATE_ERROR, "Unable to load device certificate chain");
         }
@@ -515,8 +554,6 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
 #if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
-                        endpoint->pkcs11_module.device_id = get_next_device_id_endpoint();
-
                         /* Initialize the PKCS#11 module */
                         ret = wolfssl_configure_pkcs11_endpoint(endpoint, config);
                         if (ret != 0)
@@ -533,7 +570,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
                                                                        PKCS11_LABEL_IDENTIFIER_LEN,
                                                                endpoint->pkcs11_module.device_id);
 #else
-                        ERROR_OUT(ASL_PKCS11_ERROR, "Secure element support is not compiled in, please compile with support enabled");
+                        ERROR_OUT(ASL_PKCS11_ERROR, "PKCS#11 support is not compiled in, please compile with support enabled");
 #endif
                 }
                 else
@@ -673,8 +710,8 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         if (ret != ASL_SUCCESS)
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure new TLS server context");
 
-        /* Configure the available curves for Key Exchange. For the server, all are allowed to
-         * support various clients. */
+        /* Configure the available curves for Key Exchange. For the server, all are allowed
+         * to support various clients. */
         int wolfssl_key_exchange_curves[] = {
                 WOLFSSL_P521_ML_KEM_1024,
                 WOLFSSL_ML_KEM_1024,
@@ -764,11 +801,11 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         if (ret != ASL_SUCCESS)
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure new TLS client context");
 
-        /* Configure the curve for Key Exchange. For the client, we the first one in the list
-         * is the one selected for the initial KeyShare in the ClientHello message. In case
-         * the server doesn't support this curve, a HelloRetryRequest is generated with a
-         * curve from the supported_groups extension (this list contains all curves from the
-         * list below). */
+        /* Configure the curve for Key Exchange. For the client, we the first one in the
+         * list is the one selected for the initial KeyShare in the ClientHello message. In
+         * case the server doesn't support this curve, a HelloRetryRequest is generated with
+         * a curve from the supported_groups extension (this list contains all curves from
+         * the list below). */
         int wolfssl_key_exchange_curves[] = {
                 WOLFSSL_P384_ML_KEM_768, // Default
 
@@ -939,9 +976,9 @@ cleanup:
 
 /* Perform the TLS handshake for a newly created session.
  *
- * Returns ASL_SUCCESS on success, negative error code on failure (error message is logged to
- * the console). In case the handshake is not done yet and you have to call the method again
- * when new data from the peer is present, ASL_WANT_READ is returned.
+ * Returns ASL_SUCCESS on success, negative error code on failure (error message is logged
+ * to the console). In case the handshake is not done yet and you have to call the method
+ * again when new data from the peer is present, ASL_WANT_READ is returned.
  */
 int asl_handshake(asl_session* session)
 {
@@ -1063,11 +1100,13 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
                         }
                 }
 
-                /* It is technically possible to call asl_receive() and asl_send() without performing the
-                 * TLS handshake via asl_handshake(). Although this is discouraged, we do not prevent it.
-                 * However, we have to properly handle internal state here, mainly to free any handshake
-                 * buffers. As soon as wolfssl_read() or wolfssl_write() return a successful return code,
-                 * we are sure to finished the TLS handshake. Hence, we can update the state here safely.
+                /* It is technically possible to call asl_receive() and asl_send() without
+                 * performing the TLS handshake via asl_handshake(). Although this is
+                 * discouraged, we do not prevent it. However, we have to properly handle
+                 * internal state here, mainly to free any handshake buffers. As soon as
+                 * wolfssl_read() or wolfssl_write() return a successful return code, we are
+                 * sure to finished the TLS handshake. Hence, we can update the state here
+                 * safely.
                  */
                 if (session->state != CONNECTION_STATE_CONNECTED)
                 {
@@ -1090,9 +1129,9 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
 /* Send data to the TLS remote peer.
  *
  * Returns ASL_SUCCESS on success, negative error code on failure (error message is logged
- * to the console). In case we cannot write the data in one call, ASL_WANT_WRITE is returned,
- * indicating that you have to call the method again (with the same data!) once the socket is
- * writable again.
+ * to the console). In case we cannot write the data in one call, ASL_WANT_WRITE is
+ * returned, indicating that you have to call the method again (with the same data!) once
+ * the socket is writable again.
  */
 int asl_send(asl_session* session, uint8_t const* buffer, int size)
 {
@@ -1115,13 +1154,13 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
                         tmp += ret;
                         ret = ASL_SUCCESS;
 
-                        /* It is technically possible to call asl_receive() and asl_send() without
-                         * performing the TLS handshake via asl_handshake(). Although this is
-                         * discouraged, we do not prevent it. However, we have to properly handle
-                         * internal state here, mainly to free any handshake buffers. As soon as
-                         * wolfssl_read() or wolfssl_write() return a successful return code, we are
-                         * sure to finished the TLS handshake. Hence, we can update the state here
-                         * safely.
+                        /* It is technically possible to call asl_receive() and asl_send()
+                         * without performing the TLS handshake via asl_handshake().
+                         * Although this is discouraged, we do not prevent it. However, we
+                         * have to properly handle internal state here, mainly to free any
+                         * handshake buffers. As soon as wolfssl_read() or wolfssl_write()
+                         * return a successful return code, we are sure to finished the TLS
+                         * handshake. Hence, we can update the state here safely.
                          */
                         if (session->state != CONNECTION_STATE_CONNECTED)
                         {
@@ -1144,8 +1183,8 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
                         }
                         else if (ret == WOLFSSL_ERROR_WANT_WRITE)
                         {
-                                /* We have more to write, but obviously the socket can't handle
-                                 * it right now. */
+                                /* We have more to write, but obviously the socket can't
+                                 * handle it right now. */
                                 ret = ASL_WANT_WRITE;
                         }
                         else if ((ret == WOLFSSL_ERROR_SYSCALL) || (ret == SOCKET_PEER_CLOSED_E))
