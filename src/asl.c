@@ -719,10 +719,13 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         /* Configure peer authentification */
         int verify_mode = WOLFSSL_VERIFY_NONE;
 
-        /* If PSKs are used, mutual authentiation shall not be activated by default */
-        if ((config->mutual_authentication == true) && (config->psk.enable_psk == false))
+        if (config->mutual_authentication == true)
         {
-                verify_mode = WOLFSSL_VERIFY_PEER | WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+                verify_mode = WOLFSSL_VERIFY_PEER;
+                if (config->psk.enable_psk == true)
+                        verify_mode |= WOLFSSL_VERIFY_FAIL_EXCEPT_PSK;
+                else
+                        verify_mode |= WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT;
         }
         wolfSSL_CTX_set_verify(endpoint->wolfssl_context, verify_mode, NULL);
 
@@ -797,6 +800,9 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 
                 /* To avoid ambiguity, we set the PSK client callback here to NULL */
                 new_endpoint->psk.psk_client_cb = NULL;
+
+                /* Only allow PSK together with an ephemeral key exchange */
+                wolfSSL_CTX_only_dhe_psk(new_endpoint->wolfssl_context);
 #else
                 /* In case wolfSSL is not correctly built for psk applications, add log entry */
                 asl_log(ASL_LOG_LEVEL_WRN, "wolfSSL not built with PSK (--enable-psk)");
@@ -907,6 +913,9 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 
                 /* To avoid ambiguity, we set the PSK server callback here to NULL */
                 new_endpoint->psk.psk_server_cb = NULL;
+
+                /* Only allow PSK together with an ephemeral key exchange */
+                wolfSSL_CTX_only_dhe_psk(new_endpoint->wolfssl_context);
 #else
                 /* In case wolfSSL is not correctly built for psk applications, add log entry */
                 asl_log(ASL_LOG_LEVEL_WRN, "wolfSSL not built with PSK (--enable-psk)");
