@@ -46,6 +46,7 @@ enum connection_state
 struct asl_endpoint
 {
         WOLFSSL_CTX* wolfssl_context;
+        char const* ciphersuites;
 
         struct
         {
@@ -303,36 +304,49 @@ done:
 #endif /* HAVE_SECRET_CALLBACK */
 
 #ifndef NO_PSK
+
 static unsigned int wolfssl_tls13_client_cb(WOLFSSL* ssl,
                                             const char* hint,
                                             char* identity,
                                             unsigned int id_max_len,
                                             unsigned char* key,
                                             unsigned int key_max_len,
-                                            const char* ciphersuite)
+                                            const char** ciphersuite)
 {
         (void) hint;
-        (void) key_max_len;
         (void) id_max_len;
         (void) ciphersuite;
 
         unsigned int key_len = 0;
 
-        asl_endpoint* endpoint = (asl_endpoint*) wolfSSL_get_psk_callback_ctx(ssl);
-        if (endpoint != NULL)
+        asl_session* session = (asl_session*) wolfSSL_get_psk_callback_ctx(ssl);
+        if (session != NULL)
         {
-                if (endpoint->psk.psk_client_cb != NULL)
+                if (session->endpoint->psk.psk_client_cb != NULL)
                 {
-                        key_len = endpoint->psk.psk_client_cb(key, identity);
+                        /* Call external callback to get key and identity */
+                        key_len = session->endpoint->psk.psk_client_cb(key, identity);
+                }
+                else if (session->endpoint->psk.master_key != NULL)
+                {
+                        /* Use the master key as PSK key */
+                        key_len = (unsigned int) strlen(session->endpoint->psk.master_key);
+                        if (key_len > key_max_len)
+                                key_len = key_max_len;
+                        memcpy(key, session->endpoint->psk.master_key, key_len);
+
+                        strcpy(identity, "default_identity");
                 }
                 else
                 {
                         asl_log(ASL_LOG_LEVEL_ERR, "ASL PSK client callback not set!");
                 }
+
+                *ciphersuite = session->endpoint->ciphersuites;
         }
         else
         {
-                asl_log(ASL_LOG_LEVEL_ERR, "ASL endpoint pointer not set!");
+                asl_log(ASL_LOG_LEVEL_ERR, "ASL session pointer not set!");
         }
 
         return key_len;
@@ -348,21 +362,32 @@ static unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl,
 
         unsigned int key_len = 0;
 
-        asl_endpoint* endpoint = (asl_endpoint*) wolfSSL_get_psk_callback_ctx(ssl);
-        if (endpoint != NULL)
+        asl_session* session = (asl_session*) wolfSSL_get_psk_callback_ctx(ssl);
+        if (session != NULL)
         {
-                if (endpoint->psk.psk_server_cb != NULL)
+                if (session->endpoint->psk.psk_server_cb != NULL)
                 {
-                        key_len = endpoint->psk.psk_server_cb(key, identity, ciphersuite);
+                        /* Call external callback to get key for identity */
+                        key_len = session->endpoint->psk.psk_server_cb(key, identity, ciphersuite);
+                }
+                else if (session->endpoint->psk.master_key != NULL)
+                {
+                        /* Use the master key as PSK key */
+                        key_len = (unsigned int) strlen(session->endpoint->psk.master_key);
+                        if (key_len > key_max_len)
+                                key_len = key_max_len;
+                        memcpy(key, session->endpoint->psk.master_key, key_len);
                 }
                 else
                 {
                         asl_log(ASL_LOG_LEVEL_ERR, "ASL PSK server callback not set!");
                 }
+
+                *ciphersuite = session->endpoint->ciphersuites;
         }
         else
         {
-                asl_log(ASL_LOG_LEVEL_ERR, "ASL endpoint pointer not set!");
+                asl_log(ASL_LOG_LEVEL_ERR, "ASL session pointer not set!");
         }
 
         return key_len;
@@ -563,6 +588,7 @@ static int wolfssl_configure_endpoint(asl_endpoint* endpoint, asl_endpoint_confi
         if ((endpoint == NULL) || (config == NULL))
                 return ASL_ARGUMENT_ERROR;
 
+        endpoint->ciphersuites = NULL;
         endpoint->pkcs11_module.initialized = false;
         endpoint->pkcs11_module.device_id = INVALID_DEVID;
 
@@ -886,10 +912,9 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 
         /* Configure the available cipher suites for TLS 1.3
          * We only support AES GCM with 256 bit key length and the
-         * integrity only cipher with SHA384.
-         */
-        ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context,
-                                          "TLS13-AES256-GCM-SHA384:TLS13-SHA384-SHA384");
+         * integrity only cipher with SHA384. */
+        new_endpoint->ciphersuites = "TLS13-AES256-GCM-SHA384:TLS13-SHA384-SHA384";
+        ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context, new_endpoint->ciphersuites);
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
 
@@ -936,8 +961,8 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         {
 #ifndef NO_PSK
                 /* Set wolfSSL internal PSK callback (not passed to the user) */
-                wolfSSL_CTX_set_psk_client_cs_callback(new_endpoint->wolfssl_context,
-                                                       wolfssl_tls13_client_cb);
+                wolfSSL_CTX_set_psk_client_tls13_callback(new_endpoint->wolfssl_context,
+                                                          wolfssl_tls13_client_cb);
 
                 /* Set asl callback, to reference user implementation */
                 if (config->psk.use_external_callbacks && config->psk.psk_client_cb != NULL)
@@ -1045,11 +1070,11 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
          * We only support AES GCM with 256 bit key length and the
          * integrity only cipher with SHA384.
          */
-        char const* cipher_list = "TLS13-AES256-GCM-SHA384";
+        new_endpoint->ciphersuites = "TLS13-AES256-GCM-SHA384";
         if (config->no_encryption)
-                cipher_list = "TLS13-SHA384-SHA384";
+                new_endpoint->ciphersuites = "TLS13-SHA384-SHA384";
 
-        ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context, cipher_list);
+        ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context, new_endpoint->ciphersuites);
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
 
