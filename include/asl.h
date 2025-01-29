@@ -64,8 +64,9 @@ typedef void (*asl_log_callback_t)(int32_t level, char const* message);
 typedef unsigned int (*asl_psk_client_callback_t)(char* key, char* identity);
 
 /* Function pointer type for server psk. */
-typedef unsigned int (*asl_psk_server_callback_t)(char* key, const char* identity, const char** ciphersuite);
-
+typedef unsigned int (*asl_psk_server_callback_t)(char* key,
+                                                  const char* identity,
+                                                  const char** ciphersuite);
 
 /* Data structure for the library configuration. */
 typedef struct

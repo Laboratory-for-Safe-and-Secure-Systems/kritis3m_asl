@@ -301,20 +301,23 @@ done:
 #endif /* HAVE_SECRET_CALLBACK */
 
 #ifndef NO_PSK
-static inline unsigned int wolfssl_tls13_client_cb(WOLFSSL* ssl, const char* hint, 
-                                                   char* identity, unsigned int id_max_len,
-                                                   unsigned char* key, unsigned int key_max_len,
+static inline unsigned int wolfssl_tls13_client_cb(WOLFSSL* ssl,
+                                                   const char* hint,
+                                                   char* identity,
+                                                   unsigned int id_max_len,
+                                                   unsigned char* key,
+                                                   unsigned int key_max_len,
                                                    const char* ciphersuite)
 {
-        (void)hint;
-        (void)key_max_len;
-        (void)id_max_len;
-        (void)ciphersuite;
+        (void) hint;
+        (void) key_max_len;
+        (void) id_max_len;
+        (void) ciphersuite;
 
         uint8_t key_len = 0;
-        
+
         asl_psk_client_callback_t asl_cb = wolfSSL_get_psk_callback_ctx(ssl);
-        if(asl_cb != NULL)
+        if (asl_cb != NULL)
         {
                 key_len = asl_cb(key, identity);
         }
@@ -327,16 +330,18 @@ static inline unsigned int wolfssl_tls13_client_cb(WOLFSSL* ssl, const char* hin
         return key_len;
 }
 
-static inline unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl, const char* identity,
-                                                   unsigned char* key, unsigned int key_max_len, 
+static inline unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl,
+                                                   const char* identity,
+                                                   unsigned char* key,
+                                                   unsigned int key_max_len,
                                                    const char** ciphersuite)
 {
-        (void)key_max_len;
+        (void) key_max_len;
 
         uint8_t key_len = 0;
-        
+
         asl_psk_server_callback_t asl_cb = wolfSSL_get_psk_callback_ctx(ssl);
-        if(asl_cb != NULL)
+        if (asl_cb != NULL)
         {
                 key_len = asl_cb(key, identity, ciphersuite);
         }
@@ -774,20 +779,22 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure new TLS server context");
 
         /* Set wolSSL pre-shared key callbacks, if enable_psk flag is set. */
-        if(config->psk.enable_psk)
+        if (config->psk.enable_psk)
         {
 #ifndef NO_PSK
                 /* Set wolfSSL internal PSK call-back (not passed to the user) */
-                wolfSSL_CTX_set_psk_server_tls13_callback(new_endpoint->wolfssl_context, wolfssl_tls13_server_cb);
-                
-                if(wolfSSL_CTX_use_psk_identity_hint(new_endpoint->wolfssl_context, "asl server") != WOLFSSL_SUCCESS)
+                wolfSSL_CTX_set_psk_server_tls13_callback(new_endpoint->wolfssl_context,
+                                                          wolfssl_tls13_server_cb);
+
+                if (wolfSSL_CTX_use_psk_identity_hint(new_endpoint->wolfssl_context, "asl server") !=
+                    WOLFSSL_SUCCESS)
                 {
                         ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to set psk identity hint");
                 }
 
                 /* Set asl call-back, to reference user implementation */
                 new_endpoint->psk.psk_server_cb = config->psk.psk_server_cb;
-                
+
                 /* To avoid ambiguity, we set the PSK client callback here to NULL */
                 new_endpoint->psk.psk_client_cb = NULL;
 #else
@@ -888,15 +895,16 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure new TLS client context");
 
         /* Set wolSSL pre-shared key callbacks, if enable_psk flag is set. */
-        if(config->psk.enable_psk)
+        if (config->psk.enable_psk)
         {
 #ifndef NO_PSK
                 /* Set wolfSSL internal PSK call-back (not passed to the user) */
-                wolfSSL_CTX_set_psk_client_cs_callback(new_endpoint->wolfssl_context, wolfssl_tls13_client_cb);
-                
+                wolfSSL_CTX_set_psk_client_cs_callback(new_endpoint->wolfssl_context,
+                                                       wolfssl_tls13_client_cb);
+
                 /* Set asl call-back, to reference user implementation */
                 new_endpoint->psk.psk_client_cb = config->psk.psk_client_cb;
-                
+
                 /* To avoid ambiguity, we set the PSK server callback here to NULL */
                 new_endpoint->psk.psk_server_cb = NULL;
 #else
@@ -1046,7 +1054,7 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
         new_session->handshake_metrics.rx_bytes = 0;
 
 #ifndef NO_PSK
-        if(endpoint->psk.psk_client_cb != NULL)
+        if (endpoint->psk.psk_client_cb != NULL)
         {
                 /* Set client call-back reference in the WOLFSSL* ssl object */
                 wolfSSL_set_psk_callback_ctx(new_session->wolfssl_session, endpoint->psk.psk_client_cb);
@@ -1063,7 +1071,6 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
                 ERROR_OUT(ASL_PSK_ERROR, "no callback function was set for the endpoint");
         }
 #endif
-
 
         /* Store the socket fd */
         wolfSSL_set_fd(new_session->wolfssl_session, socket_fd);
