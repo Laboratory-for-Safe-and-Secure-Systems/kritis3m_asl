@@ -45,6 +45,7 @@ enum ASL_ERROR_CODES
         ASL_CONN_CLOSED = -6,
         ASL_WANT_READ = -7,
         ASL_WANT_WRITE = -8,
+        ASL_PSK_ERROR = -9,
 };
 
 /* Available Log levels. Default is ERR. */
@@ -56,10 +57,18 @@ enum ASL_LOG_LEVEL
         ASL_LOG_LEVEL_DBG = 4U,
 };
 
-/* Function pointer type fo logging callbacks. */
+/* Function pointer type for logging callbacks. */
 typedef void (*asl_log_callback_t)(int32_t level, char const* message);
 
-/* Data structure for the library configuration */
+/* Function pointer type for client psk. */
+typedef unsigned int (*asl_psk_client_callback_t)(char* key, char* identity);
+
+/* Function pointer type for server psk. */
+typedef unsigned int (*asl_psk_server_callback_t)(char* key,
+                                                  const char* identity,
+                                                  const char** ciphersuite);
+
+/* Data structure for the library configuration. */
 typedef struct
 {
         bool logging_enabled;
@@ -104,6 +113,14 @@ typedef struct
                 bool use_for_all;
 
         } pkcs11;
+
+        struct
+        {
+                asl_psk_client_callback_t psk_client_cb;
+                asl_psk_server_callback_t psk_server_cb;
+                bool enable_psk;
+
+        } psk;
 
         struct
         {
