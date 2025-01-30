@@ -124,7 +124,6 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         endpoint->ciphersuites = NULL;
         endpoint->pkcs11_module.initialized = false;
         endpoint->pkcs11_module.device_id = INVALID_DEVID;
-        endpoint->psk.use_external_callbacks = false;
 
 #if defined(HAVE_SECRET_CALLBACK)
         if (config->keylog_file != NULL)
