@@ -388,7 +388,6 @@ int psk_setup_client(asl_endpoint* endpoint, asl_endpoint_configuration const* c
         /* To avoid ambiguity, we set the PSK server callback here to NULL */
         endpoint->psk.psk_server_cb = NULL;
 
-cleanup:
         return ret;
 #else
         (void) endpoint;
