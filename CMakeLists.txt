@@ -91,8 +91,12 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/priv_include/asl_config.h.in asl_
 
 # Define the main library
 add_library(kritis3m_asl
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/asl.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/asl_general.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/asl_endpoint.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/asl_session.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/asl_logging.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/asl_psk.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/asl_pkcs11.c
 )
 
 # Public headers

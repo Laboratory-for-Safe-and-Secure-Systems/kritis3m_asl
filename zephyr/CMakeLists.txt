@@ -11,8 +11,12 @@ if(CONFIG_KRITIS3M_ASL)
         )
 
         zephyr_library()
-        zephyr_library_sources(${ZEPHYR_CURRENT_MODULE_DIR}/src/asl.c)
+        zephyr_library_sources(${ZEPHYR_CURRENT_MODULE_DIR}/src/asl_general.c)
+        zephyr_library_sources(${ZEPHYR_CURRENT_MODULE_DIR}/src/asl_endpoint.c)
+        zephyr_library_sources(${ZEPHYR_CURRENT_MODULE_DIR}/src/asl_session.c)
         zephyr_library_sources(${ZEPHYR_CURRENT_MODULE_DIR}/src/asl_logging.c)
+        zephyr_library_sources(${ZEPHYR_CURRENT_MODULE_DIR}/src/asl_psk.c)
+        zephyr_library_sources(${ZEPHYR_CURRENT_MODULE_DIR}/src/asl_pkcs11.c)
 
         # Add PKCS11 related stuff
         if(CONFIG_KRITIS3M_ASL_PKCS11)
