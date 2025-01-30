@@ -61,12 +61,10 @@ enum ASL_LOG_LEVEL
 typedef void (*asl_log_callback_t)(int32_t level, char const* message);
 
 /* Function pointer type for client psk. */
-typedef unsigned int (*asl_psk_client_callback_t)(char* key, char* identity);
+typedef unsigned int (*asl_psk_client_callback_t)(char* key, char* identity, void* ctx);
 
 /* Function pointer type for server psk. */
-typedef unsigned int (*asl_psk_server_callback_t)(char* key,
-                                                  const char* identity,
-                                                  const char** ciphersuite);
+typedef unsigned int (*asl_psk_server_callback_t)(char* key, const char* identity, void* ctx);
 
 /* Data structure for the library configuration. */
 typedef struct
@@ -121,6 +119,7 @@ typedef struct
                 asl_psk_server_callback_t psk_server_cb;
                 bool enable_psk;
                 bool use_external_callbacks;
+                void* callback_ctx;
 
         } psk;
 

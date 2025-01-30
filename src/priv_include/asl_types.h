@@ -1,7 +1,6 @@
 #ifndef ASL_TYPES_H
 #define ASL_TYPES_H
 
-
 #include <errno.h>
 #include <stdlib.h>
 
@@ -53,6 +52,8 @@ struct asl_endpoint
                 asl_psk_client_callback_t psk_client_cb;
                 asl_psk_server_callback_t psk_server_cb;
                 char* master_key;
+                void* callback_ctx;
+                bool use_external_callbacks;
         } psk;
 #endif
 
