@@ -305,8 +305,6 @@ int psk_setup_general(asl_endpoint* endpoint, asl_endpoint_configuration const* 
         /* Only allow PSK together with an ephemeral key exchange */
         wolfSSL_CTX_only_dhe_psk(endpoint->wolfssl_context);
 
-        endpoint->psk.use_external_callbacks = false;
-
         if (config->psk.master_key != NULL)
         {
                 endpoint->psk.master_key = (char*) malloc(strlen(config->psk.master_key) + 1);
