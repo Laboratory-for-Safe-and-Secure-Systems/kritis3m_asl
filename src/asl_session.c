@@ -306,8 +306,8 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
                                 bytes_read = ASL_WANT_READ;
                                 break;
                         }
-                        else if ((ret == WOLFSSL_ERROR_ZERO_RETURN) ||
-                                 (ret == WOLFSSL_ERROR_SYSCALL) || (ret == SOCKET_PEER_CLOSED_E))
+                        else if ((ret == WOLFSSL_ERROR_ZERO_RETURN) || (ret == WOLFSSL_ERROR_SYSCALL) ||
+                                 (ret == SOCKET_PEER_CLOSED_E) || (ret == SOCKET_ERROR_E))
                         {
                                 bytes_read = ASL_CONN_CLOSED;
                                 break;
@@ -410,7 +410,8 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
                                  * handle it right now. */
                                 ret = ASL_WANT_WRITE;
                         }
-                        else if ((ret == WOLFSSL_ERROR_SYSCALL) || (ret == SOCKET_PEER_CLOSED_E))
+                        else if ((ret == WOLFSSL_ERROR_SYSCALL) || (ret == SOCKET_PEER_CLOSED_E) ||
+                                 (ret == SOCKET_ERROR_E))
                         {
                                 ret = ASL_CONN_CLOSED;
                         }
