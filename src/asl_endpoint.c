@@ -165,8 +165,12 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                             PKCS11_LABEL_IDENTIFIER,
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
-                        char const* label = (char const*) config->device_certificate_chain.buffer +
-                                            PKCS11_LABEL_IDENTIFIER_LEN;
+                        char label_buffer[128];
+                        strncpy(label_buffer,
+                                (char const*) config->device_certificate_chain.buffer +
+                                        PKCS11_LABEL_IDENTIFIER_LEN,
+                                sizeof(label_buffer));
+                        char* label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
 
                         ret = use_pkcs11_certificate_chain(endpoint, config, label);
                 }
@@ -192,10 +196,26 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                             PKCS11_LABEL_IDENTIFIER,
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
-                        char const* label = (char const*) config->private_key.buffer +
-                                            PKCS11_LABEL_IDENTIFIER_LEN;
+                        char label_buffer[128];
+                        strncpy(label_buffer,
+                                (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN,
+                                sizeof(label_buffer));
+                        char* label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
 
                         ret = use_pkcs11_private_key(endpoint, config, label);
+
+                        /* Check if an alternative key label is also present */
+                        label = strtok(NULL, PKCS11_LABEL_TERMINATOR);
+                        if ((label != NULL) &&
+                            (strncmp(label, PKCS11_LABEL_IDENTIFIER, PKCS11_LABEL_IDENTIFIER_LEN) == 0))
+                        {
+                                label += PKCS11_LABEL_IDENTIFIER_LEN;
+
+                                if (wolfssl_check_for_error(ret))
+                                        ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to load private key");
+
+                                ret = use_pkcs11_alt_private_key(endpoint, config, label);
+                        }
                 }
                 else
                 {
@@ -219,8 +239,12 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                             PKCS11_LABEL_IDENTIFIER,
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
-                        char const* label = (char const*) config->private_key.additional_key_buffer +
-                                            PKCS11_LABEL_IDENTIFIER_LEN;
+                        char label_buffer[128];
+                        strncpy(label_buffer,
+                                (char const*) config->private_key.additional_key_buffer +
+                                        PKCS11_LABEL_IDENTIFIER_LEN,
+                                sizeof(label_buffer));
+                        char* label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
 
                         ret = use_pkcs11_alt_private_key(endpoint, config, label);
                 }

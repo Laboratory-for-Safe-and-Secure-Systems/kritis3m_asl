@@ -9,6 +9,7 @@
 
 #define PKCS11_LABEL_IDENTIFIER "pkcs11:"
 #define PKCS11_LABEL_IDENTIFIER_LEN 7
+#define PKCS11_LABEL_TERMINATOR "\r\n"
 
 /* Properly set the API visibility */
 #if defined(BUILDING_KRITIS3M_ASL)
