@@ -460,7 +460,10 @@ int asl_get_peer_certificate(asl_session* session, uint8_t* buffer, size_t* size
         /* Get the certificate */
         cert = wolfSSL_get_peer_certificate(session->wolfssl_session);
         if (cert == NULL)
-                ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to get peer certificate");
+        {
+                asl_log(ASL_LOG_LEVEL_INF, "Unable to get peer certificate");
+                return ASL_NO_PEER_CERTIFICATE;
+        }
 
         /* Get underlying buffer and size */
         der_buf = wolfSSL_X509_get_der(cert, &der_size);

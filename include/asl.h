@@ -47,6 +47,7 @@ enum ASL_ERROR_CODES
         ASL_WANT_READ = -7,
         ASL_WANT_WRITE = -8,
         ASL_PSK_ERROR = -9,
+        ASL_NO_PEER_CERTIFICATE = -10,
 };
 
 /* Available Log levels. Default is ERR. */

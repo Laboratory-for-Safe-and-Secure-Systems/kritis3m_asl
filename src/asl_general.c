@@ -130,6 +130,12 @@ char const* asl_error_message(int error_code)
         case ASL_WANT_WRITE:
                 errMsg = "Unable to write to the socket";
                 break;
+        case ASL_PSK_ERROR:
+                errMsg = "PSK error";
+                break;
+        case ASL_NO_PEER_CERTIFICATE:
+                errMsg = "No peer certificate available";
+                break;
         default:
                 errMsg = "Unknown error";
                 break;
