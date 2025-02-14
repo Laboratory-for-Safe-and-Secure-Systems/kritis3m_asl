@@ -169,7 +169,7 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                         strncpy(label_buffer,
                                 (char const*) config->device_certificate_chain.buffer +
                                         PKCS11_LABEL_IDENTIFIER_LEN,
-                                sizeof(label_buffer));
+                                sizeof(label_buffer) - 1);
                         char* label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
 
                         ret = use_pkcs11_certificate_chain(endpoint, config, label);
@@ -199,7 +199,7 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                         char label_buffer[128];
                         strncpy(label_buffer,
                                 (char const*) config->private_key.buffer + PKCS11_LABEL_IDENTIFIER_LEN,
-                                sizeof(label_buffer));
+                                sizeof(label_buffer) - 1);
                         char* label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
 
                         ret = use_pkcs11_private_key(endpoint, config, label);
@@ -243,7 +243,7 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                         strncpy(label_buffer,
                                 (char const*) config->private_key.additional_key_buffer +
                                         PKCS11_LABEL_IDENTIFIER_LEN,
-                                sizeof(label_buffer));
+                                sizeof(label_buffer) - 1);
                         char* label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
 
                         ret = use_pkcs11_alt_private_key(endpoint, config, label);
