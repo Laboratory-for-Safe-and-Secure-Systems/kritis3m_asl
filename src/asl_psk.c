@@ -326,10 +326,13 @@ int psk_setup_general(asl_endpoint* endpoint, asl_endpoint_configuration const* 
         #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
         /* If configured in the WOLFSSL usersettings, we can activate the extension for certificates in 
          * addition to the PSKs. */
-        ret = wolfSSL_CTX_set_cert_with_extern_psk(endpoint->wolfssl_context, config->psk.enable_certWithExternPsk);
+        endpoint->psk.enable_certWithExternPsk = config->psk.enable_certWithExternPsk;
+         ret = wolfSSL_CTX_set_cert_with_extern_psk(endpoint->wolfssl_context, config->psk.enable_certWithExternPsk);
         if(ret != WOLFSSL_SUCCESS)
                 goto cleanup;
         #endif
+        
+        return ASL_SUCCESS;
 
 cleanup:
         return ret;
