@@ -68,6 +68,7 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
         default_config.psk.psk_client_cb = NULL;
         default_config.psk.psk_server_cb = NULL;
         default_config.psk.callback_ctx = NULL;
+        default_config.psk.enable_certWithExternPsk = false;
 
         return default_config;
 }

@@ -121,6 +121,7 @@ typedef struct
                 asl_psk_server_callback_t psk_server_cb;
                 bool enable_psk;
                 bool use_external_callbacks;
+                bool enable_certWithExternPsk;
                 void* callback_ctx;
 
         } psk;

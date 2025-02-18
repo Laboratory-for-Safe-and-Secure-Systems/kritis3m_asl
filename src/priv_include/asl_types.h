@@ -54,6 +54,9 @@ struct asl_endpoint
                 char* master_key;
                 void* callback_ctx;
                 bool use_external_callbacks;
+#ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+                bool enable_certWithExternPsk;
+#endif
         } psk;
 #endif
 
