@@ -103,8 +103,8 @@ enum asl_key_exchange_method
 typedef struct
 {
         bool mutual_authentication;
-        bool no_encryption;
         enum asl_key_exchange_method key_exchange_method;
+        char const* ciphersuites;
 
         struct
         {

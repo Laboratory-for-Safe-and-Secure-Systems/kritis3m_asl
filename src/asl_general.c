@@ -48,8 +48,8 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
         asl_endpoint_configuration default_config = {0};
 
         default_config.mutual_authentication = true;
-        default_config.no_encryption = false;
         default_config.key_exchange_method = ASL_KEX_DEFAULT;
+        default_config.ciphersuites = NULL;
         default_config.pkcs11.module_path = NULL;
         default_config.pkcs11.module_pin = NULL;
         default_config.pkcs11.use_for_all = false;

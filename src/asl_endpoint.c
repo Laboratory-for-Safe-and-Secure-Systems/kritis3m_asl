@@ -300,6 +300,22 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                         ERROR_OUT(ret, "Failed to setup PSK");
         }
 
+        /* Configure the available cipher suites */
+        char const* ciphersuites = config->ciphersuites;
+        if (ciphersuites == NULL)
+                ciphersuites = "TLS13-AES256-GCM-SHA384:TLS13-SHA384-SHA384";
+
+        /* Allocate new string for the ciphersuites */
+        size_t ciphersuite_len = strlen(ciphersuites) + 1;
+        endpoint->ciphersuites = (char*) malloc(ciphersuite_len);
+        if (endpoint->ciphersuites == NULL)
+                ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for ciphersuites");
+        memcpy(endpoint->ciphersuites, ciphersuites, ciphersuite_len);
+
+        ret = wolfSSL_CTX_set_cipher_list(endpoint->wolfssl_context, endpoint->ciphersuites);
+        if (wolfssl_check_for_error(ret))
+                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
+
         return ASL_SUCCESS;
 
 cleanup:
@@ -370,14 +386,6 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
                                      sizeof(wolfssl_key_exchange_curves) / sizeof(int));
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure key exchange curves");
-
-        /* Configure the available cipher suites for TLS 1.3
-         * We only support AES GCM with 256 bit key length and the
-         * integrity only cipher with SHA384. */
-        new_endpoint->ciphersuites = "TLS13-AES256-GCM-SHA384:TLS13-SHA384-SHA384";
-        ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context, new_endpoint->ciphersuites);
-        if (wolfssl_check_for_error(ret))
-                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
 
         return new_endpoint;
 
@@ -512,18 +520,6 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure key exchange curve");
 
-        /* Configure the available cipher suites for TLS 1.3
-         * We only support AES GCM with 256 bit key length and the
-         * integrity only cipher with SHA384.
-         */
-        new_endpoint->ciphersuites = "TLS13-AES256-GCM-SHA384";
-        if (config->no_encryption)
-                new_endpoint->ciphersuites = "TLS13-SHA384-SHA384";
-
-        ret = wolfSSL_CTX_set_cipher_list(new_endpoint->wolfssl_context, new_endpoint->ciphersuites);
-        if (wolfssl_check_for_error(ret))
-                ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
-
         return new_endpoint;
 
 cleanup:
@@ -551,6 +547,9 @@ void asl_free_endpoint(asl_endpoint* endpoint)
                 if (endpoint->keylog_file != NULL)
                         free(endpoint->keylog_file);
 #endif
+
+                if (endpoint->ciphersuites != NULL)
+                        free(endpoint->ciphersuites);
 
                 free(endpoint);
         }

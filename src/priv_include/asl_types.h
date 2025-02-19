@@ -32,7 +32,7 @@ enum connection_state
 struct asl_endpoint
 {
         WOLFSSL_CTX* wolfssl_context;
-        char const* ciphersuites;
+        char* ciphersuites;
 
         struct
         {
