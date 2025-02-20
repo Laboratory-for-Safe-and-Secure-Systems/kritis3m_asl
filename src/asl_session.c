@@ -449,7 +449,7 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
 int asl_get_peer_certificate(asl_session* session, uint8_t* buffer, size_t* size)
 {
 #ifdef KEEP_PEER_CERT
-        int ret = 0;
+        int ret = ASL_SUCCESS;
         WOLFSSL_X509* cert = NULL;
         uint8_t const* der_buf = NULL;
         int der_size = 0;
@@ -474,8 +474,6 @@ int asl_get_peer_certificate(asl_session* session, uint8_t* buffer, size_t* size
         /* Copy the certificate into the buffer */
         memcpy(buffer, der_buf, der_size);
         *size = der_size;
-
-        return ASL_SUCCESS;
 
 cleanup:
         if (cert != NULL)
