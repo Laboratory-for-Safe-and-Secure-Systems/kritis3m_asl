@@ -112,7 +112,7 @@ target_include_directories(kritis3m_asl PRIVATE
 )
 
 # Link against WolfSSL
-target_link_libraries(kritis3m_asl PRIVATE wolfssl)
+target_link_libraries(kritis3m_asl PRIVATE wolfssl::wolfssl)
 
 # Add a preprocessor definition to indicate that we are building the library
 # This is required to distinguish between building the library and using it
