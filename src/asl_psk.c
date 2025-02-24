@@ -129,7 +129,7 @@ static int handle_local_master_key_client(asl_session* session,
                 key[i] ^= identity_raw[i];
 
         /* Encode the identity */
-        ret = Base64_Encode_NoNl(identity_raw, key_len, identity, &id_len);
+        ret = Base64_Encode_NoNl(identity_raw, key_len, (byte*) identity, &id_len);
         if (ret != 0)
                 ERROR_OUT(-1, "Failed to encode PSK identity: %d", ret);
 
@@ -323,15 +323,16 @@ int psk_setup_general(asl_endpoint* endpoint, asl_endpoint_configuration const* 
                 ERROR_OUT(ASL_ARGUMENT_ERROR,
                           "Either a PSK master key or external callbacks must be used");
 
-        #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
-        /* If configured in the WOLFSSL usersettings, we can activate the extension for certificates in 
-         * addition to the PSKs. */
+#ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
+        /* If configured in the WOLFSSL usersettings, we can activate the extension for certificates
+         * in addition to the PSKs. */
         endpoint->psk.enable_certWithExternPsk = config->psk.enable_certWithExternPsk;
-         ret = wolfSSL_CTX_set_cert_with_extern_psk(endpoint->wolfssl_context, config->psk.enable_certWithExternPsk);
-        if(ret != WOLFSSL_SUCCESS)
+        ret = wolfSSL_CTX_set_cert_with_extern_psk(endpoint->wolfssl_context,
+                                                   config->psk.enable_certWithExternPsk);
+        if (ret != WOLFSSL_SUCCESS)
                 goto cleanup;
-        #endif
-        
+#endif
+
         return ASL_SUCCESS;
 
 cleanup:
