@@ -6,7 +6,7 @@
 
 I2C_RV setupI2C(i2cParameters* params)
 {
-        const struct device* const dev = DEVICE_DT_GET(DT_NODELABEL(i2c1));
+        const struct device* const dev = DEVICE_DT_GET(DT_ALIAS(pico_i2c));
 
         // printk("main : setupI2C\n");
 
@@ -41,7 +41,7 @@ I2C_RV setupI2C(i2cParameters* params)
 
 I2C_RV I2C_RW(void* context, unsigned char* packet, int packetLength, unsigned char* response, int* responseLength)
 {
-        const struct device* const dev = DEVICE_DT_GET(DT_NODELABEL(i2c1));
+        const struct device* const dev = DEVICE_DT_GET(DT_ALIAS(pico_i2c));
         i2cParameters* params = (i2cParameters*) context;
 
         // printk("main : I2C_RW\n");
