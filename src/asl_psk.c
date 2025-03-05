@@ -13,6 +13,7 @@
 #include "wolfssl/wolfcrypt/asn.h"
 #include "wolfssl/wolfcrypt/coding.h"
 #include "wolfssl/wolfcrypt/cryptocb.h"
+#include "wolfssl/wolfcrypt/hmac.h"
 #include "wolfssl/wolfcrypt/memory.h"
 #include "wolfssl/wolfcrypt/wc_pkcs11.h"
 
@@ -125,8 +126,9 @@ static int handle_local_master_key_client(asl_session* session,
                 ERROR_OUT(-1, "Failed to generate random data: %d", ret);
 
         /* Derive PSK from master key and random data */
-        for (uint32_t i = 0; i < key_len; i++)
-                key[i] ^= identity_raw[i];
+        ret = wc_HKDF(WC_SHA256, key, key_len, identity_raw, key_len, NULL, 0, key, key_len);
+        if (ret != 0)
+                ERROR_OUT(-1, "Failed to derive PSK: %d", ret);
 
         /* Encode the identity */
         ret = Base64_Encode_NoNl(identity_raw, key_len, (byte*) identity, &id_len);
@@ -167,8 +169,9 @@ static int handle_local_master_key_server(asl_session* session,
                 ERROR_OUT(-1, "Identity and key length mismatch");
 
         /* Derive the PSK key from the master key and the identity */
-        for (uint32_t i = 0; i < key_len; i++)
-                key[i] ^= identity_raw[i];
+        ret = wc_HKDF(WC_SHA256, key, key_len, identity_raw, key_len, NULL, 0, key, key_len);
+        if (ret != 0)
+                ERROR_OUT(-1, "Failed to derive PSK: %d", ret);
 
         ret = key_len;
 
@@ -184,7 +187,47 @@ static int handle_pkcs11_master_key_client(asl_session* session,
                                            uint32_t key_max_len)
 {
         int ret = 0;
+        uint8_t identity_raw[128] = {0};
 
+        word32 key_len = 32; // Temp!!!! key_max_len;
+        word32 id_len = id_max_len;
+
+        char label_buffer[64];
+        char* label = NULL;
+
+        Hkdf hkdf;
+
+        /* Get PSK label */
+        strncpy(label_buffer,
+                session->endpoint->psk.master_key + PKCS11_LABEL_IDENTIFIER_LEN,
+                sizeof(label_buffer) - 1);
+        label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
+        if (label == NULL)
+                ERROR_OUT(-1, "Invalid PKCS#11 label");
+
+        ret = wc_HkdfInit_Label(&hkdf, WC_SHA256, label, NULL, session->endpoint->pkcs11_module.device_id);
+        if (ret != 0)
+                ERROR_OUT(-1, "Failed to initialize HKDF: %d", ret);
+
+        /* Generate random data */
+        ret = wc_RNG_GenerateBlock(wolfSSL_GetRNG(session->wolfssl_session), identity_raw, key_len);
+        if (ret != 0)
+                ERROR_OUT(-1, "Failed to generate random data: %d", ret);
+
+        /* Derive PSK from master key and random data */
+        ret = wc_Hkdf(&hkdf, NULL, 0, identity_raw, key_len, NULL, 0, key, key_len);
+        if (ret != 0)
+                ERROR_OUT(-1, "Failed to derive PSK: %d", ret);
+
+        /* Encode the identity */
+        ret = Base64_Encode_NoNl(identity_raw, key_len, (byte*) identity, &id_len);
+        if (ret != 0)
+                ERROR_OUT(-1, "Failed to encode PSK identity: %d", ret);
+
+        ret = key_len;
+
+cleanup:
+        wc_HkdfFree(&hkdf);
         return ret;
 }
 
@@ -194,7 +237,45 @@ static int handle_pkcs11_master_key_server(asl_session* session,
                                            uint32_t key_max_len)
 {
         int ret = 0;
+        uint8_t identity_raw[128] = {0};
 
+        word32 key_len = 32; // Temp!!!! key_max_len;
+        word32 id_len = sizeof(identity_raw);
+
+        char label_buffer[64];
+        char* label = NULL;
+
+        Hkdf hkdf;
+
+        /* Get PSK label */
+        strncpy(label_buffer,
+                session->endpoint->psk.master_key + PKCS11_LABEL_IDENTIFIER_LEN,
+                sizeof(label_buffer) - 1);
+        label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
+        if (label == NULL)
+                ERROR_OUT(-1, "Invalid PKCS#11 label");
+
+        ret = wc_HkdfInit_Label(&hkdf, WC_SHA256, label, NULL, session->endpoint->pkcs11_module.device_id);
+        if (ret != 0)
+                ERROR_OUT(-1, "Failed to initialize HKDF: %d", ret);
+
+        /* Decode the received identity */
+        ret = Base64_Decode((byte*) identity, strlen(identity), identity_raw, &id_len);
+        if (ret != 0)
+                ERROR_OUT(-1, "Failed to decode PSK identity: %d", ret);
+
+        if (id_len != key_len)
+                ERROR_OUT(-1, "Identity and key length mismatch");
+
+        /* Derive PSK from master key and random data */
+        ret = wc_Hkdf(&hkdf, NULL, 0, identity_raw, key_len, NULL, 0, key, key_len);
+        if (ret != 0)
+                ERROR_OUT(-1, "Failed to derive PSK: %d", ret);
+
+        ret = key_len;
+
+cleanup:
+        wc_HkdfFree(&hkdf);
         return ret;
 }
 
@@ -224,7 +305,7 @@ static unsigned int wolfssl_tls13_client_cb(WOLFSSL* ssl,
                                                                   key_max_len);
                 }
                 else if (session->endpoint->psk.master_key != NULL &&
-                         strncmp((char const*) session->endpoint->psk.master_key,
+                         strncmp(session->endpoint->psk.master_key,
                                  PKCS11_LABEL_IDENTIFIER,
                                  PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
@@ -274,7 +355,7 @@ static unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl,
                         key_len = handle_external_callback_server(session, identity, key, key_max_len);
                 }
                 else if (session->endpoint->psk.master_key != NULL &&
-                         strncmp((char const*) session->endpoint->psk.master_key,
+                         strncmp(session->endpoint->psk.master_key,
                                  PKCS11_LABEL_IDENTIFIER,
                                  PKCS11_LABEL_IDENTIFIER_LEN) == 0)
                 {
