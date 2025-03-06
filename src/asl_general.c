@@ -50,25 +50,32 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
         default_config.mutual_authentication = true;
         default_config.key_exchange_method = ASL_KEX_DEFAULT;
         default_config.ciphersuites = NULL;
+
         default_config.pkcs11.module_path = NULL;
         default_config.pkcs11.module_pin = NULL;
         default_config.pkcs11.use_for_all = false;
+
         default_config.device_certificate_chain.buffer = NULL;
         default_config.device_certificate_chain.size = 0;
+
         default_config.private_key.buffer = NULL;
         default_config.private_key.size = 0;
         default_config.private_key.additional_key_buffer = NULL;
         default_config.private_key.additional_key_size = 0;
+
         default_config.root_certificate.buffer = NULL;
         default_config.root_certificate.size = 0;
+
         default_config.keylog_file = NULL;
+
         default_config.psk.enable_psk = false;
         default_config.psk.use_external_callbacks = false;
-        default_config.psk.master_key = NULL;
+        default_config.psk.enable_cert_auth = true;
+        default_config.psk.key = NULL;
+        default_config.psk.identity = NULL;
+        default_config.psk.callback_ctx = NULL;
         default_config.psk.psk_client_cb = NULL;
         default_config.psk.psk_server_cb = NULL;
-        default_config.psk.callback_ctx = NULL;
-        default_config.psk.enable_certWithExternPsk = false;
 
         return default_config;
 }

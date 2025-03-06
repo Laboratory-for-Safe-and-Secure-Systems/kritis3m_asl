@@ -37,17 +37,18 @@ static int handle_external_callback_client(asl_session* session,
         char identity_ext[128] = {0};
 
         /* Execute the user callback */
-        ret = session->endpoint->psk.psk_client_cb(key_base64,
-                                                   identity_ext,
-                                                   session->endpoint->psk.callback_ctx);
+        ret = session->endpoint->psk.psk_client_cb(key_base64, identity_ext, session->endpoint->psk.key);
 
         if (ret <= 0)
                 ERROR_OUT(-1, "PSK client callback failed");
 
-        int id_len = strlen(identity_ext);
+        int id_ext_len = strlen(identity_ext);
         word32 key_len = strlen(key_base64);
 
-        if (id_len > id_max_len || key_len > key_max_len)
+        /* Check sizes. We append the received external identity string to our existing
+         * identity, separated by a colon (Hence the 2 additional chars) */
+        if (((id_ext_len + strlen(session->endpoint->psk.identity) + 2) > id_max_len) ||
+            (key_len > key_max_len))
                 ERROR_OUT(-1, "PSK client callback returned oversized data");
 
         key_len = key_max_len;
@@ -58,7 +59,7 @@ static int handle_external_callback_client(asl_session* session,
                 ERROR_OUT(-1, "Failed to decode PSK key: %d", ret);
 
         /* Copy the identity */
-        strncpy(identity, identity_ext, id_max_len);
+        snprintf(identity, id_max_len, "%s:%s", session->endpoint->psk.identity, identity_ext);
 
         ret = key_len;
 
@@ -74,10 +75,14 @@ static int handle_external_callback_server(asl_session* session,
         int ret = 0;
         char key_base64[128] = {0};
 
+        /* Remove the identity prefix */
+        char const* identity_ext = strchr(identity, ':');
+        if (identity_ext == NULL)
+                ERROR_OUT(-1, "Invalid external identity");
+        identity_ext += 1; /* Skip the colon */
+
         /* Execute the user callback */
-        ret = session->endpoint->psk.psk_server_cb(key_base64,
-                                                   identity,
-                                                   session->endpoint->psk.callback_ctx);
+        ret = session->endpoint->psk.psk_server_cb(key_base64, identity_ext, session->endpoint->psk.key);
 
         if (ret <= 0)
                 ERROR_OUT(-1, "PSK server callback failed");
@@ -100,40 +105,44 @@ cleanup:
         return ret;
 }
 
-static int handle_local_master_key_client(asl_session* session,
-                                          char* identity,
-                                          uint32_t id_max_len,
-                                          uint8_t* key,
-                                          uint32_t key_max_len)
+static int handle_local_key_client(asl_session* session,
+                                   char* identity,
+                                   uint32_t id_max_len,
+                                   uint8_t* key,
+                                   uint32_t key_max_len)
 {
         int ret = 0;
-        uint8_t identity_raw[128] = {0};
+        int key_len;
+        int id_len = strlen(session->endpoint->psk.identity);
 
-        word32 key_len = key_max_len;
-        word32 id_len = id_max_len;
+        if (id_len > id_max_len - 1)
+                ERROR_OUT(-1, "PSK identity too long");
 
-        /* Decode the master key */
-        ret = Base64_Decode((byte*) session->endpoint->psk.master_key,
-                            strlen(session->endpoint->psk.master_key),
-                            key,
-                            &key_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to decode PSK key: %d", ret);
+        /* Copy the identifier */
+        memcpy(identity, session->endpoint->psk.identity, id_len + 1); /* Copy including terminator */
 
-        /* Generate random data */
-        ret = wc_RNG_GenerateBlock(wolfSSL_GetRNG(session->wolfssl_session), identity_raw, key_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to generate random data: %d", ret);
+        /* Check if we have an external PSK. Only check if the key is equal to the
+         * PKCS11_LABEL_IDENTIFIER excluding the colon at the end. */
+        if (memcmp(session->endpoint->psk.key,
+                   PKCS11_LABEL_IDENTIFIER,
+                   PKCS11_LABEL_IDENTIFIER_LEN - 1) == 0)
+        {
+                /* Use the identifier as the PKCS#11 label */
+                ret = wolfSSL_use_psk_key_label(session->wolfssl_session,
+                                                session->endpoint->psk.identity,
+                                                session->endpoint->pkcs11_module.device_id);
+                if (ret != 0)
+                        ERROR_OUT(-1, "Failed to use PSK key label: %d", ret);
 
-        /* Derive PSK from master key and random data */
-        ret = wc_HKDF(WC_SHA256, key, key_len, identity_raw, key_len, NULL, 0, key, key_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to derive PSK: %d", ret);
-
-        /* Encode the identity */
-        ret = Base64_Encode_NoNl(identity_raw, key_len, (byte*) identity, &id_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to encode PSK identity: %d", ret);
+                key_len = id_len + 1; /* Including terminator */
+                memcpy(key, session->endpoint->psk.identity, key_len);
+        }
+        else
+        {
+                /* Copy key */
+                key_len = session->endpoint->psk.key_len;
+                memcpy(key, session->endpoint->psk.key, key_len);
+        }
 
         ret = key_len;
 
@@ -141,141 +150,45 @@ cleanup:
         return ret;
 }
 
-static int handle_local_master_key_server(asl_session* session,
-                                          char const* identity,
-                                          uint8_t* key,
-                                          uint32_t key_max_len)
+static int handle_local_key_server(asl_session* session,
+                                   char const* identity,
+                                   uint8_t* key,
+                                   uint32_t key_max_len)
 {
         int ret = 0;
-        uint8_t identity_raw[128] = {0};
+        int key_len;
+        int id_len = strlen(session->endpoint->psk.identity);
 
-        word32 key_len = key_max_len;
-        word32 id_len = sizeof(identity_raw);
+        /* We already checked that the received identity is equal to our own one. */
+        (void) identity;
 
-        /* Decode the master key */
-        ret = Base64_Decode((byte*) session->endpoint->psk.master_key,
-                            strlen(session->endpoint->psk.master_key),
-                            key,
-                            &key_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to decode PSK key: %d", ret);
+        /* Check if we have an external PSK. Only check if the key is equal to the
+         * PKCS11_LABEL_IDENTIFIER excluding the colon at the end. */
+        if (memcmp(session->endpoint->psk.key,
+                   PKCS11_LABEL_IDENTIFIER,
+                   PKCS11_LABEL_IDENTIFIER_LEN - 1) == 0)
+        {
+                /* Use the identifier as the PKCS#11 label */
+                ret = wolfSSL_use_psk_key_label(session->wolfssl_session,
+                                                session->endpoint->psk.identity,
+                                                session->endpoint->pkcs11_module.device_id);
+                if (ret != 0)
+                        ERROR_OUT(-1, "Failed to use PSK key label: %d", ret);
 
-        /* Decode the received identity */
-        ret = Base64_Decode((byte*) identity, strlen(identity), identity_raw, &id_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to decode PSK identity: %d", ret);
-
-        if (id_len != key_len)
-                ERROR_OUT(-1, "Identity and key length mismatch");
-
-        /* Derive the PSK key from the master key and the identity */
-        ret = wc_HKDF(WC_SHA256, key, key_len, identity_raw, key_len, NULL, 0, key, key_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to derive PSK: %d", ret);
+                key_len = id_len + 1; /* Including terminator */
+                memcpy(key, session->endpoint->psk.identity, key_len);
+        }
+        else
+        {
+                /* Copy key */
+                key_len = session->endpoint->psk.key_len;
+                memcpy(key, session->endpoint->psk.key, key_len);
+        }
 
         ret = key_len;
 
 cleanup:
 
-        return ret;
-}
-
-static int handle_pkcs11_master_key_client(asl_session* session,
-                                           char* identity,
-                                           uint32_t id_max_len,
-                                           uint8_t* key,
-                                           uint32_t key_max_len)
-{
-        int ret = 0;
-        uint8_t identity_raw[128] = {0};
-
-        word32 key_len = 32; // Temp!!!! key_max_len;
-        word32 id_len = id_max_len;
-
-        char label_buffer[64];
-        char* label = NULL;
-
-        Hkdf hkdf;
-
-        /* Get PSK label */
-        strncpy(label_buffer,
-                session->endpoint->psk.master_key + PKCS11_LABEL_IDENTIFIER_LEN,
-                sizeof(label_buffer) - 1);
-        label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
-        if (label == NULL)
-                ERROR_OUT(-1, "Invalid PKCS#11 label");
-
-        ret = wc_HkdfInit_Label(&hkdf, WC_SHA256, label, NULL, session->endpoint->pkcs11_module.device_id);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to initialize HKDF: %d", ret);
-
-        /* Generate random data */
-        ret = wc_RNG_GenerateBlock(wolfSSL_GetRNG(session->wolfssl_session), identity_raw, key_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to generate random data: %d", ret);
-
-        /* Derive PSK from master key and random data */
-        ret = wc_Hkdf(&hkdf, NULL, 0, identity_raw, key_len, NULL, 0, key, key_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to derive PSK: %d", ret);
-
-        /* Encode the identity */
-        ret = Base64_Encode_NoNl(identity_raw, key_len, (byte*) identity, &id_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to encode PSK identity: %d", ret);
-
-        ret = key_len;
-
-cleanup:
-        wc_HkdfFree(&hkdf);
-        return ret;
-}
-
-static int handle_pkcs11_master_key_server(asl_session* session,
-                                           char const* identity,
-                                           uint8_t* key,
-                                           uint32_t key_max_len)
-{
-        int ret = 0;
-        uint8_t identity_raw[128] = {0};
-
-        word32 key_len = 32; // Temp!!!! key_max_len;
-        word32 id_len = sizeof(identity_raw);
-
-        char label_buffer[64];
-        char* label = NULL;
-
-        Hkdf hkdf;
-
-        /* Get PSK label */
-        strncpy(label_buffer,
-                session->endpoint->psk.master_key + PKCS11_LABEL_IDENTIFIER_LEN,
-                sizeof(label_buffer) - 1);
-        label = strtok(label_buffer, PKCS11_LABEL_TERMINATOR);
-        if (label == NULL)
-                ERROR_OUT(-1, "Invalid PKCS#11 label");
-
-        ret = wc_HkdfInit_Label(&hkdf, WC_SHA256, label, NULL, session->endpoint->pkcs11_module.device_id);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to initialize HKDF: %d", ret);
-
-        /* Decode the received identity */
-        ret = Base64_Decode((byte*) identity, strlen(identity), identity_raw, &id_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to decode PSK identity: %d", ret);
-
-        if (id_len != key_len)
-                ERROR_OUT(-1, "Identity and key length mismatch");
-
-        /* Derive PSK from master key and random data */
-        ret = wc_Hkdf(&hkdf, NULL, 0, identity_raw, key_len, NULL, 0, key, key_len);
-        if (ret != 0)
-                ERROR_OUT(-1, "Failed to derive PSK: %d", ret);
-
-        ret = key_len;
-
-cleanup:
-        wc_HkdfFree(&hkdf);
         return ret;
 }
 
@@ -304,24 +217,9 @@ static unsigned int wolfssl_tls13_client_cb(WOLFSSL* ssl,
                                                                   key,
                                                                   key_max_len);
                 }
-                else if (session->endpoint->psk.master_key != NULL &&
-                         strncmp(session->endpoint->psk.master_key,
-                                 PKCS11_LABEL_IDENTIFIER,
-                                 PKCS11_LABEL_IDENTIFIER_LEN) == 0)
+                else if (session->endpoint->psk.key != NULL)
                 {
-                        key_len = handle_pkcs11_master_key_client(session,
-                                                                  identity,
-                                                                  id_max_len,
-                                                                  key,
-                                                                  key_max_len);
-                }
-                else if (session->endpoint->psk.master_key != NULL)
-                {
-                        key_len = handle_local_master_key_client(session,
-                                                                 identity,
-                                                                 id_max_len,
-                                                                 key,
-                                                                 key_max_len);
+                        key_len = handle_local_key_client(session, identity, id_max_len, key, key_max_len);
                 }
 
                 if (key_len > 0)
@@ -349,21 +247,21 @@ static unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl,
         asl_session* session = (asl_session*) wolfSSL_get_psk_callback_ctx(ssl);
         if (session != NULL && session->endpoint != NULL)
         {
+                /* Check if the received identity matches ours. */
+                if (strncmp(identity,
+                            session->endpoint->psk.identity,
+                            strlen(session->endpoint->psk.identity)) != 0)
+                        return 0;
+
+                /* Check if we have a local PSK or if we have to use the external interface. */
                 if (session->endpoint->psk.use_external_callbacks == true &&
                     session->endpoint->psk.psk_server_cb != NULL)
                 {
                         key_len = handle_external_callback_server(session, identity, key, key_max_len);
                 }
-                else if (session->endpoint->psk.master_key != NULL &&
-                         strncmp(session->endpoint->psk.master_key,
-                                 PKCS11_LABEL_IDENTIFIER,
-                                 PKCS11_LABEL_IDENTIFIER_LEN) == 0)
+                else if (session->endpoint->psk.key != NULL)
                 {
-                        key_len = handle_pkcs11_master_key_server(session, identity, key, key_max_len);
-                }
-                else if (session->endpoint->psk.master_key != NULL)
-                {
-                        key_len = handle_local_master_key_server(session, identity, key, key_max_len);
+                        key_len = handle_local_key_server(session, identity, key, key_max_len);
                 }
 
                 if (key_len > 0)
@@ -382,34 +280,67 @@ int psk_setup_general(asl_endpoint* endpoint, asl_endpoint_configuration const* 
 {
 #ifndef NO_PSK
         int ret = 0;
+        uint8_t key_raw[128] = {0};
+        word32 key_len = sizeof(key_raw);
 
         /* Only allow PSK together with an ephemeral key exchange */
         wolfSSL_CTX_only_dhe_psk(endpoint->wolfssl_context);
 
-        if (config->psk.master_key != NULL)
+        if (config->psk.key != NULL)
         {
-                endpoint->psk.master_key = (char*) malloc(strlen(config->psk.master_key) + 1);
-                if (endpoint->psk.master_key == NULL)
+                /* Check if a Base64 decoded key is given or a PKCS#11 one is referenced. */
+                if (memcmp(config->psk.key, PKCS11_LABEL_IDENTIFIER, PKCS11_LABEL_IDENTIFIER_LEN - 1) ==
+                    0)
+                {
+                        memcpy(key_raw, config->psk.key, PKCS11_LABEL_IDENTIFIER_LEN - 1);
+                        key_raw[PKCS11_LABEL_IDENTIFIER_LEN - 1] = '\0';
+                        key_len = PKCS11_LABEL_IDENTIFIER_LEN;
+                }
+                else
+                {
+                        /* Base64 decode the given key */
+                        ret = Base64_Decode((byte const*) config->psk.key,
+                                            strlen(config->psk.key),
+                                            key_raw,
+                                            &key_len);
+                        if (ret != 0)
+                                ERROR_OUT(ASL_PSK_ERROR, "Failed to decode PSK key: %d", ret);
+                }
+
+                /* Store decoded key */
+                endpoint->psk.key_len = key_len;
+                endpoint->psk.key = malloc(key_len);
+                if (endpoint->psk.key == NULL)
                         ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for PSK master key");
 
-                strcpy(endpoint->psk.master_key, config->psk.master_key);
+                memcpy(endpoint->psk.key, key_raw, key_len);
         }
         else if (config->psk.use_external_callbacks == true)
         {
-                endpoint->psk.master_key = NULL;
                 endpoint->psk.use_external_callbacks = true;
-                endpoint->psk.callback_ctx = config->psk.callback_ctx;
+                endpoint->psk.key = config->psk.callback_ctx;
         }
         else
-                ERROR_OUT(ASL_ARGUMENT_ERROR,
-                          "Either a PSK master key or external callbacks must be used");
+                ERROR_OUT(ASL_ARGUMENT_ERROR, "Either a PSK key or external callbacks must be used");
+
+        /* Store the identity */
+        if (config->psk.identity != NULL)
+        {
+                size_t id_len = strlen(config->psk.identity) + 1;
+                endpoint->psk.identity = malloc(id_len);
+                if (endpoint->psk.identity == NULL)
+                        ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for PSK identity");
+                memcpy(endpoint->psk.identity, config->psk.identity, id_len);
+        }
+        else
+                ERROR_OUT(ASL_ARGUMENT_ERROR, "PSK identity must be set");
 
 #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
         /* If configured in the WOLFSSL usersettings, we can activate the extension for certificates
          * in addition to the PSKs. */
-        endpoint->psk.enable_certWithExternPsk = config->psk.enable_certWithExternPsk;
+        endpoint->psk.enable_cert_auth = config->psk.enable_cert_auth;
         ret = wolfSSL_CTX_set_cert_with_extern_psk(endpoint->wolfssl_context,
-                                                   config->psk.enable_certWithExternPsk);
+                                                   (int) config->psk.enable_cert_auth);
         if (ret != WOLFSSL_SUCCESS)
                 goto cleanup;
 #endif
@@ -493,10 +424,10 @@ int psk_setup_client(asl_endpoint* endpoint, asl_endpoint_configuration const* c
 void psk_endpoint_cleanup(asl_endpoint* endpoint)
 {
 #ifndef NO_PSK
-        if (endpoint->psk.master_key != NULL)
+        if (endpoint->psk.use_external_callbacks == false && endpoint->psk.key != NULL)
         {
-                free(endpoint->psk.master_key);
-                endpoint->psk.master_key = NULL;
+                free(endpoint->psk.key);
+                endpoint->psk.key = NULL;
         }
 #endif
 }

@@ -49,14 +49,17 @@ struct asl_endpoint
 #ifndef NO_PSK
         struct
         {
+                bool use_external_callbacks;
+                bool enable_cert_auth;
+
+                char* identity;
+                void* key; /* either a byte array containing the key or
+                            * or the callback_ctx in case those are used */
+                size_t key_len;
+
                 asl_psk_client_callback_t psk_client_cb;
                 asl_psk_server_callback_t psk_server_cb;
-                char* master_key;
-                void* callback_ctx;
-                bool use_external_callbacks;
-#ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
-                bool enable_certWithExternPsk;
-#endif
+
         } psk;
 #endif
 
@@ -95,4 +98,4 @@ struct asl_session
 #define DEVICE_ID_OFFSET_SESSION DEVICE_ID_MAX_ENDPOINT
 #define DEVICE_ID_MAX_SESSION 10000
 
-#endif
+#endif /* ASL_TYPES_H */

@@ -116,13 +116,16 @@ typedef struct
 
         struct
         {
-                char const* master_key;
+                bool enable_psk;
+                bool enable_cert_auth;
+                bool use_external_callbacks;
+
+                char const* key;
+                char const* identity;
+
+                void* callback_ctx;
                 asl_psk_client_callback_t psk_client_cb;
                 asl_psk_server_callback_t psk_server_cb;
-                bool enable_psk;
-                bool use_external_callbacks;
-                bool enable_certWithExternPsk;
-                void* callback_ctx;
 
         } psk;
 
