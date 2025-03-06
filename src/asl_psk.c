@@ -429,5 +429,10 @@ void psk_endpoint_cleanup(asl_endpoint* endpoint)
                 free(endpoint->psk.key);
                 endpoint->psk.key = NULL;
         }
+        if (endpoint->psk.identity != NULL)
+        {
+                free(endpoint->psk.identity);
+                endpoint->psk.identity = NULL;
+        }
 #endif
 }
