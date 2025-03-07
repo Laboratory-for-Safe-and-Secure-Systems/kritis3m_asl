@@ -162,6 +162,9 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
 
 #ifndef NO_PSK
         wolfSSL_set_psk_callback_ctx(new_session->wolfssl_session, new_session);
+        new_session->external_psk.identity = NULL;
+        new_session->external_psk.key = NULL;
+        new_session->external_psk.key_len = 0;
 #endif
 
         /* Store the socket fd */
@@ -234,6 +237,19 @@ int asl_handshake(asl_session* session)
 
 #ifdef HAVE_SECRET_CALLBACK
                         wolfSSL_FreeArrays(session->wolfssl_session);
+#endif
+#ifndef NO_PSK
+                        if (session->external_psk.identity != NULL)
+                        {
+                                free(session->external_psk.identity);
+                                session->external_psk.identity = NULL;
+                        }
+                        if (session->external_psk.key != NULL)
+                        {
+                                memset(session->external_psk.key, 0, session->external_psk.key_len);
+                                free(session->external_psk.key);
+                                session->external_psk.key = NULL;
+                        }
 #endif
 
                         ret = ASL_SUCCESS;
@@ -522,6 +538,20 @@ void asl_free_session(asl_session* session)
         {
                 if (session->wolfssl_session != NULL)
                         wolfSSL_free(session->wolfssl_session);
+
+#ifndef NO_PSK
+                if (session->external_psk.identity != NULL)
+                {
+                        free(session->external_psk.identity);
+                        session->external_psk.identity = NULL;
+                }
+                if (session->external_psk.key != NULL)
+                {
+                        memset(session->external_psk.key, 0, session->external_psk.key_len);
+                        free(session->external_psk.key);
+                        session->external_psk.key = NULL;
+                }
+#endif
 
                 free(session);
         }

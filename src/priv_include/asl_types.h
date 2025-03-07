@@ -83,6 +83,17 @@ struct asl_session
                 uint32_t rx_bytes;
 
         } handshake_metrics;
+
+#ifndef NO_PSK
+        struct
+        {
+                char* identity;
+                uint8_t* key;
+                size_t key_len;
+
+        } external_psk;
+
+#endif
 };
 
 /* PKCS#11 Device ID handling. Each endpoint needs a unique DevID for
