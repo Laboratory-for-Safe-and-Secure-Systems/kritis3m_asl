@@ -51,8 +51,6 @@ static int handle_external_callback_client(asl_session* session,
                 if (ret <= 0)
                         ERROR_OUT(-1, "PSK client callback failed");
 
-                session->external_psk.identity = strdup(identity_ext);
-
                 int id_ext_len = strlen(identity_ext);
                 word32 key_len = strlen(key_base64);
                 if (key_len != ret)
