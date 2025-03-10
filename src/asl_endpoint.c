@@ -284,10 +284,19 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         /* Configure peer authentification */
         int verify_mode = WOLFSSL_VERIFY_NONE;
 
+        if (config->psk.enable_psk == true)
+        {
+                /* When we have a PSK for the endpoint, we require its usage. Hence,
+                 * we fail if no PSK is negotiated during the handshake. */
+                verify_mode |= WOLFSSL_VERIFY_FAIL_IF_NO_PSK;
+        }
+
         if (config->mutual_authentication == true)
         {
-                verify_mode = WOLFSSL_VERIFY_PEER;
-                if (config->psk.enable_psk == true)
+                /* Enable peer authentication via certificates */
+                verify_mode |= WOLFSSL_VERIFY_PEER;
+
+                if (config->psk.enable_psk == true && config->psk.enable_cert_auth == false)
                         verify_mode |= WOLFSSL_VERIFY_FAIL_EXCEPT_PSK;
                 else
                         verify_mode |= WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT;
