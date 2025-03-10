@@ -84,13 +84,24 @@ static int handle_external_callback_client(asl_session* session,
                 memcpy(key, session->external_psk.key, session->external_psk.key_len);
         }
 
-        /* Create the identity string */
-        ret = snprintf(identity,
-                       id_max_len,
-                       "%s:%s:%s",
-                       session->endpoint->psk.identity,
-                       ciphersuite,
-                       session->external_psk.identity);
+        if (session->external_psk.key_len > key_max_len)
+                ERROR_OUT(-1, "Key buffer too small");
+
+        /* Create the identity string. Check if we use SHA256 or SHA384 in the ciphersuite */
+        if (strstr(ciphersuite, "SHA256") != NULL)
+                ret = snprintf(identity,
+                               id_max_len,
+                               "%s:SHA256:%s",
+                               session->endpoint->psk.identity,
+                               session->external_psk.identity);
+        else if (strstr(ciphersuite, "SHA384") != NULL)
+                ret = snprintf(identity,
+                               id_max_len,
+                               "%s:SHA384:%s",
+                               session->endpoint->psk.identity,
+                               session->external_psk.identity);
+        else
+                ERROR_OUT(-1, "Unknown Hash algorithm in ciphersuite");
 
         if (ret < 0 || ret >= id_max_len)
                 ERROR_OUT(-1, "Failed to create PSK identity");
@@ -110,12 +121,14 @@ static int handle_external_callback_server(asl_session* session,
         int ret = 0;
         char key_base64[128] = {0};
 
+        (void) ciphersuite; /* Already checked... */
+
         /* Check if we have to execute the external callback. This ensures that the external
          * callback is only called once, no matter how often these internal ones are called.
          */
         if (session->external_psk.key == NULL)
         {
-                /* Get to the external id. Structure is <internal_id:cipher:external_id> */
+                /* Get to the external id. Structure is <internal_id:hash_alg:external_id> */
                 char const* identity_ext = strchr(identity, ':');
                 if (identity_ext == NULL)
                         ERROR_OUT(-1, "Invalid external identity");
@@ -156,16 +169,11 @@ static int handle_external_callback_server(asl_session* session,
                 memcpy(key, session->external_psk.key, session->external_psk.key_len);
         }
 
-        /* Extract the ciphersuite from the identity */
-        char* cipher = strchr(identity, ':');
-        if (cipher != NULL)
-        {
-                /* Success */
-                *ciphersuite = cipher + 1;
-                ret = session->external_psk.key_len;
-        }
-        else
-                asl_log(ASL_LOG_LEVEL_ERR, "Unable to get server-side PSK");
+        if (session->external_psk.key_len > key_max_len)
+                ERROR_OUT(-1, "Key buffer too small");
+
+        /* Success */
+        ret = session->external_psk.key_len;
 
 cleanup:
         return ret;
@@ -181,8 +189,14 @@ static int handle_local_key_client(asl_session* session,
         int ret = 0;
         int key_len;
 
-        /* Create the identity string */
-        ret = snprintf(identity, id_max_len, "%s:%s", session->endpoint->psk.identity, ciphersuite);
+        /* Create the identity string. Check if we use SHA256 or SHA384 in the ciphersuite */
+        if (strstr(ciphersuite, "SHA256") != NULL)
+                ret = snprintf(identity, id_max_len, "%s:SHA256", session->endpoint->psk.identity);
+        else if (strstr(ciphersuite, "SHA384") != NULL)
+                ret = snprintf(identity, id_max_len, "%s:SHA384", session->endpoint->psk.identity);
+        else
+                ERROR_OUT(-1, "Unknown Hash algorithm in ciphersuite");
+
         if (ret < 0 || ret >= id_max_len)
                 ERROR_OUT(-1, "Failed to create PSK identity");
 
@@ -209,6 +223,9 @@ static int handle_local_key_client(asl_session* session,
                 memcpy(key, session->endpoint->psk.key, key_len);
         }
 
+        if (key_len > key_max_len)
+                ERROR_OUT(-1, "Key buffer too small");
+
         ret = key_len;
 
 cleanup:
@@ -223,10 +240,9 @@ static int handle_local_key_server(asl_session* session,
 {
         int ret = 0;
         int key_len;
-        int id_len = strlen(session->endpoint->psk.identity);
 
-        /* We already checked that the received identity is equal to our own one. */
-        (void) identity;
+        (void) identity;    /* Already checked... */
+        (void) ciphersuite; /* Already checked... */
 
         /* Check if we have an external PSK. Only check if the key is equal to the
          * PKCS11_LABEL_IDENTIFIER excluding the colon at the end. */
@@ -241,7 +257,7 @@ static int handle_local_key_server(asl_session* session,
                 if (ret != 0)
                         ERROR_OUT(-1, "Failed to use PSK key label: %d", ret);
 
-                key_len = id_len + 1; /* Including terminator */
+                key_len = strlen(session->endpoint->psk.identity) + 1; /* Including terminator */
                 memcpy(key, session->endpoint->psk.identity, key_len);
         }
         else
@@ -251,16 +267,11 @@ static int handle_local_key_server(asl_session* session,
                 memcpy(key, session->endpoint->psk.key, key_len);
         }
 
-        /* Extract the ciphersuite from the identity */
-        char* cipher = strchr(identity, ':');
-        if (cipher != NULL)
-        {
-                /* Success */
-                *ciphersuite = cipher + 1;
-                ret = key_len;
-        }
-        else
-                asl_log(ASL_LOG_LEVEL_ERR, "Unable to get server-side PSK");
+        if (key_len > key_max_len)
+                ERROR_OUT(-1, "Key buffer too small");
+
+        /* Success */
+        ret = key_len;
 
 cleanup:
 
@@ -324,9 +335,23 @@ static unsigned int wolfssl_tls13_server_cb(WOLFSSL* ssl,
         if (session != NULL && session->endpoint != NULL)
         {
                 /* Check if the received identity matches ours. */
-                if (strncmp(identity,
-                            session->endpoint->psk.identity,
-                            strlen(session->endpoint->psk.identity)) != 0)
+                size_t our_id_len = strlen(session->endpoint->psk.identity);
+                char* received_id_end = strchr(identity, ':');
+                if (received_id_end == NULL)
+                        return 0;
+                size_t received_id_len = received_id_end - identity;
+                if (received_id_len != our_id_len)
+                        return 0;
+                else if (memcmp(identity, session->endpoint->psk.identity, our_id_len) != 0)
+                        return 0;
+
+                /* Check if the hash algorithm in the ciphersuite matches the one in the
+                 * PSK identity. */
+                if (*ciphersuite == NULL)
+                        return 0;
+                if (strstr(*ciphersuite, "SHA256") != NULL && strstr(identity, "SHA256") == NULL)
+                        return 0;
+                else if (strstr(*ciphersuite, "SHA384") != NULL && strstr(identity, "SHA384") == NULL)
                         return 0;
 
                 /* Check if we have a local PSK or if we have to use the external interface. */
