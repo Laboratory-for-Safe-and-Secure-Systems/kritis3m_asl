@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "asl_logging.h"
+#include "asl_pkcs11.h"
 #include "asl_psk.h"
 #include "asl_types.h"
 
@@ -432,6 +433,17 @@ int psk_setup_general(asl_endpoint* endpoint, asl_endpoint_configuration const* 
         }
         else
                 ERROR_OUT(ASL_ARGUMENT_ERROR, "PSK identity must be set");
+
+        /* Check if we use a PKCS#11 based PSK. In this case, we have to initialize the token */
+        if (memcmp(endpoint->psk.key, PKCS11_LABEL_IDENTIFIER, PKCS11_LABEL_IDENTIFIER_LEN - 1) == 0)
+        {
+                /* Initialize the PKCS#11 module */
+                ret = configure_pkcs11_endpoint(endpoint, config);
+                if (ret != 0)
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Failed to configure PKCS#11 crypto module");
+
+                asl_log(ASL_LOG_LEVEL_DBG, "Using external PSK with label \"%s\"", endpoint->psk.identity);
+        }
 
 #ifdef WOLFSSL_CERT_WITH_EXTERN_PSK
         /* If configured in the WOLFSSL usersettings, we can activate the extension for certificates

@@ -38,7 +38,7 @@ static int get_next_device_id_endpoint(void)
  *
  * Returns 0 on success, negative error code on failure (error message is logged to the console).
  */
-static int configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config)
+int configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config)
 {
         int ret = 0;
 
