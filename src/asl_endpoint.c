@@ -149,6 +149,15 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Unable to set minimum TLS version");
 
+        /* If we want to use a PKCS#11 token for all cryptographic operations, we have
+         * to initialize the module. */
+        if (config->pkcs11.use_for_all == true)
+        {
+                ret = configure_pkcs11_endpoint(endpoint, config);
+                if (ret != 0)
+                        ERROR_OUT(ASL_PKCS11_ERROR, "Failed to configure PKCS#11 crypto module");
+        }
+
         /* Load root certificate */
         if (config->root_certificate.buffer != NULL)
         {
