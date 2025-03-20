@@ -38,6 +38,8 @@ static int handle_external_callback_client(asl_session* session,
         int ret = 0;
         int id_ext_len = 0;
 
+        /* identity and context may be NULL, indicating that only the PSK is necessary */
+
         /* Check if we have to execute the external callback. This ensures that the external
          * callback is only called once, no matter how often these internal ones are called.
          */
@@ -90,18 +92,24 @@ static int handle_external_callback_client(asl_session* session,
         }
 
         /* Copy our identity (including terminator) */
-        size_t id_len_internal = strlen(session->endpoint->psk.identity) + 1;
-        if (id_len_internal > id_max_len)
-                ERROR_OUT(-1, "PSK identity buffer too small");
-        memcpy(identity, session->endpoint->psk.identity, id_len_internal);
+        if (identity != NULL)
+        {
+                size_t id_len_internal = strlen(session->endpoint->psk.identity) + 1;
+                if (id_len_internal > id_max_len)
+                        ERROR_OUT(-1, "PSK identity buffer too small");
+                memcpy(identity, session->endpoint->psk.identity, id_len_internal);
+        }
 
         /* Store the external identity as the context (without terminator, as length is
          * a separate parameter) */
-        id_ext_len = strlen(session->external_psk.identity);
-        if (id_ext_len > *ctx_len)
-                ERROR_OUT(-1, "PSK context buffer too small");
-        memcpy(context, session->external_psk.identity, id_ext_len);
-        *ctx_len = id_ext_len;
+        if (context != NULL && ctx_len != NULL)
+        {
+                id_ext_len = strlen(session->external_psk.identity);
+                if (id_ext_len > *ctx_len)
+                        ERROR_OUT(-1, "PSK context buffer too small");
+                memcpy(context, session->external_psk.identity, id_ext_len);
+                *ctx_len = id_ext_len;
+        }
 
 cleanup:
         return ret;
@@ -180,14 +188,39 @@ static int handle_local_key_client(asl_session* session,
 {
         int ret = 0;
 
-        /* Copy our identity */
-        size_t id_len_internal = strlen(session->endpoint->psk.identity);
-        if (id_len_internal > id_max_len)
-                ERROR_OUT(-1, "PSK identity buffer too small");
-        memcpy(identity, session->endpoint->psk.identity, id_len_internal);
+        /* identity and context may be NULL, indicating that only the PSK is necessary */
 
-        /* Clear context as we don't use it for local keys. */
-        *ctx_len = 0;
+        /* Copy our identity */
+        if (identity != NULL)
+        {
+                size_t id_len_internal = strlen(session->endpoint->psk.identity);
+                if (id_len_internal > id_max_len)
+                        ERROR_OUT(-1, "PSK identity buffer too small");
+                memcpy(identity, session->endpoint->psk.identity, id_len_internal);
+        }
+
+        /* Put 32 random byte into the context to add entropy to the imported PSK.
+         * This makes sure that handshake is forward secure. */
+        if (context != NULL && ctx_len != NULL)
+        {
+                WC_RNG rng;
+
+                if (*ctx_len < 32)
+                        ERROR_OUT(-1, "PSK context buffer too small");
+
+                ret = wc_InitRng(&rng);
+                if (ret == 0)
+                {
+                        ret = wc_RNG_GenerateBlock(&rng, context, 32);
+                        wc_FreeRng(&rng);
+                }
+                if (ret == 0)
+                {
+                        *ctx_len = 32;
+                }
+                else
+                        ERROR_OUT(-1, "Failed to generate random data for PSK context: %d", ret);
+        }
 
         /* Check if we have an external PSK. Only check if the key is equal to the
          * PKCS11_LABEL_IDENTIFIER excluding the colon at the end. */
