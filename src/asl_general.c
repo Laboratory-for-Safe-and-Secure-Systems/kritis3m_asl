@@ -69,6 +69,7 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
         default_config.keylog_file = NULL;
 
         default_config.psk.enable_psk = false;
+        default_config.psk.enable_dhe_psk = true;
         default_config.psk.use_external_callbacks = false;
         default_config.psk.enable_cert_auth = true;
         default_config.psk.key = NULL;
