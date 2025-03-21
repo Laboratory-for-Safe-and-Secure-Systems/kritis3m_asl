@@ -117,6 +117,7 @@ typedef struct
         struct
         {
                 bool enable_psk;
+                bool enable_dhe_psk;
                 bool enable_cert_auth;
                 bool use_external_callbacks;
 

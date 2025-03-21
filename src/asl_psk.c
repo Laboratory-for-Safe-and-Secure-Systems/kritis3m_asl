@@ -389,8 +389,17 @@ int psk_setup_general(asl_endpoint* endpoint, asl_endpoint_configuration const* 
         uint8_t key_raw[128] = {0};
         word32 key_len = sizeof(key_raw);
 
-        /* Only allow PSK together with an ephemeral key exchange */
-        wolfSSL_CTX_only_dhe_psk(endpoint->wolfssl_context);
+        /* setup PSK combination with (EC)DHE key gen. */
+        if(config->psk.enable_dhe_psk)
+        {
+                /* PSK + (EC)DHE */
+                wolfSSL_CTX_only_dhe_psk(endpoint->wolfssl_context);
+        }
+        else
+        {
+                /* PSK only */
+                wolfSSL_CTX_no_dhe_psk(endpoint->wolfssl_context);
+        }
 
         if (config->psk.key != NULL)
         {
