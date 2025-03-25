@@ -25,6 +25,11 @@
                 goto cleanup;                                                                      \
         }
 
+/* Number of random bytes to store in the PSK context to
+ * create a unique ImportedIdentity for each handshake.
+ */
+#define LOCAL_PSK_ENTORY_SIZE 32
+
 #ifndef NO_PSK
 
 static int handle_external_callback_client(asl_session* session,
@@ -94,10 +99,15 @@ static int handle_external_callback_client(asl_session* session,
         /* Copy our identity (including terminator) */
         if (identity != NULL)
         {
-                size_t id_len_internal = strlen(session->endpoint->psk.identity) + 1;
-                if (id_len_internal > id_max_len)
-                        ERROR_OUT(-1, "PSK identity buffer too small");
-                memcpy(identity, session->endpoint->psk.identity, id_len_internal);
+                if (*identity == '\0')
+                {
+                        size_t id_len_internal = strlen(session->endpoint->psk.identity) + 1;
+                        if (id_len_internal > id_max_len)
+                                ERROR_OUT(-1, "PSK identity buffer too small");
+                        memcpy(identity, session->endpoint->psk.identity, id_len_internal);
+                }
+                else if (strcmp(identity, session->endpoint->psk.identity) != 0)
+                        ERROR_OUT(-1, "Invalid PSK Identity: %s", identity);
         }
 
         /* Store the external identity as the context (without terminator, as length is
@@ -188,35 +198,39 @@ static int handle_local_key_client(asl_session* session,
 {
         int ret = 0;
 
-        /* identity and context may be NULL, indicating that only the PSK is necessary */
+        /* context may be NULL, indicating that only the PSK is necessary */
 
-        /* Copy our identity */
         if (identity != NULL)
         {
-                size_t id_len_internal = strlen(session->endpoint->psk.identity);
-                if (id_len_internal > id_max_len)
-                        ERROR_OUT(-1, "PSK identity buffer too small");
-                memcpy(identity, session->endpoint->psk.identity, id_len_internal);
+                /* Copy our identity as no one is present */
+                if (*identity == '\0')
+                {
+                        size_t id_len_internal = strlen(session->endpoint->psk.identity);
+                        if (id_len_internal > id_max_len)
+                                ERROR_OUT(-1, "PSK identity buffer too small");
+                        memcpy(identity, session->endpoint->psk.identity, id_len_internal);
+                }
+                else if (strcmp(identity, session->endpoint->psk.identity) != 0)
+                        ERROR_OUT(-1, "Invalid PSK Identity: %s", identity);
         }
 
-        /* Put 32 random byte into the context to add entropy to the imported PSK.
-         * This makes sure that handshake is forward secure. */
+        /* Put LOCAL_PSK_ENTORY_SIZE random byte into the context to add entropy to
+         * the imported PSK. This makes sure that handshake is forward secure. */
         if (context != NULL && ctx_len != NULL)
         {
-                WC_RNG rng;
-
-                if (*ctx_len < 32)
+                if (*ctx_len < LOCAL_PSK_ENTORY_SIZE)
                         ERROR_OUT(-1, "PSK context buffer too small");
 
-                ret = wc_InitRng(&rng);
+                ret = wc_InitRng(wolfSSL_GetRNG(session->wolfssl_session));
                 if (ret == 0)
                 {
-                        ret = wc_RNG_GenerateBlock(&rng, context, 32);
-                        wc_FreeRng(&rng);
+                        ret = wc_RNG_GenerateBlock(wolfSSL_GetRNG(session->wolfssl_session),
+                                                   context,
+                                                   LOCAL_PSK_ENTORY_SIZE);
                 }
                 if (ret == 0)
                 {
-                        *ctx_len = 32;
+                        *ctx_len = LOCAL_PSK_ENTORY_SIZE;
                 }
                 else
                         ERROR_OUT(-1, "Failed to generate random data for PSK context: %d", ret);
@@ -263,8 +277,12 @@ static int handle_local_key_server(asl_session* session,
         int ret = 0;
 
         (void) identity; /* Already checked... */
-        (void) context;  /* Not used */
-        (void) ctx_len;  /* Not used */
+        (void) context;  /* Not used, is a random byte stream */
+
+        /* Check if the context is properly filled with LOCAL_PSK_ENTORY_SIZE bytes
+         * of random data */
+        if (ctx_len != LOCAL_PSK_ENTORY_SIZE)
+                ERROR_OUT(-1, "Invalid context length: %d", ctx_len);
 
         /* Check if we have an external PSK. Only check if the key is equal to the
          * PKCS11_LABEL_IDENTIFIER excluding the colon at the end. */
@@ -390,7 +408,7 @@ int psk_setup_general(asl_endpoint* endpoint, asl_endpoint_configuration const* 
         word32 key_len = sizeof(key_raw);
 
         /* setup PSK combination with (EC)DHE key gen. */
-        if(config->psk.enable_dhe_psk)
+        if (config->psk.enable_dhe_psk)
         {
                 /* PSK + (EC)DHE */
                 wolfSSL_CTX_only_dhe_psk(endpoint->wolfssl_context);
