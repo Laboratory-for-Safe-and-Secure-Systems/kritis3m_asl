@@ -221,7 +221,6 @@ static int handle_local_key_client(asl_session* session,
                 if (*ctx_len < LOCAL_PSK_ENTORY_SIZE)
                         ERROR_OUT(-1, "PSK context buffer too small");
 
-                ret = wc_InitRng(wolfSSL_GetRNG(session->wolfssl_session));
                 if (ret == 0)
                 {
                         ret = wc_RNG_GenerateBlock(wolfSSL_GetRNG(session->wolfssl_session),
