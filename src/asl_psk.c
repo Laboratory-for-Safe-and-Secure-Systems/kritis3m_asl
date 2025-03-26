@@ -51,7 +51,7 @@ static int handle_external_callback_client(asl_session* session,
         if ((session->external_psk.identity == NULL) || (session->external_psk.key == NULL))
         {
                 char key_base64[64] = {0};
-                char identity_ext[MAX_PSK_CTX_LEN] = {0};
+                char identity_ext[64] = {0};
 
                 /* Execute the user callback */
                 ret = session->endpoint->psk.psk_client_cb(key_base64,

@@ -62,11 +62,34 @@ enum ASL_LOG_LEVEL
 /* Function pointer type for logging callbacks. */
 typedef void (*asl_log_callback_t)(int32_t level, char const* message);
 
-/* Function pointer type for client psk. */
+/* Function pointer type for client psk. This callback is executed once during
+ * connection establishment for each session. The user has to copy the PSK in
+ * base64 encoding into the `key` buffer and an ASCII based identity string into
+ * the `identity` buffer. Both buffers are 64 bytes in size. The `ctx` parameter
+ * is a user provided pointer provided during initialization.
+ * The provided key is base64 decoded and used as the external PSK for the PSK
+ * ImporterInterface. The provided identity is used as the context value within the
+ * ImportedIdentity structure of the ImporterInterface. The actual identity within
+ * that structure to be sent to the server is the identity provided during initialization.
+ * The return value must be the length of the base64 encoded key excluding the
+ * null-terminator. In case of an error, a negative number should be returned (the
+ * actual negative value is ignored).
+ */
 typedef unsigned int (*asl_psk_client_callback_t)(char* key, char* identity, void* ctx);
 
-/* Function pointer type for server psk. */
-typedef unsigned int (*asl_psk_server_callback_t)(char* key, const char* identity, void* ctx);
+/* Function pointer type for server psk. This callback is executed once during
+ * connection establishment for each session. The `identity` parameter points to a
+ * char array containing the context value of the received ImportedIdentity structure
+ * of the PSK ImporterInterface. As this buffer is a stack-allocated copy, it can safely
+ * be modified by the user within its 64 byte bounds. The user has to provide a base64
+ * encoded key into the `key` buffer (which is also 64 bytes in size). This key is base64
+ * decoded and then used as the external PSK for the PSK ImporterInterface. The `ctx`
+ * parameter is a user provided pointer provided during initialization.
+ * The return value must be the length of the base64 encoded key excluding the
+ * null-terminator. In case of an error, a negative number should be returned (the
+ * actual negative value is ignored).
+ */
+typedef unsigned int (*asl_psk_server_callback_t)(char* key, char* identity, void* ctx);
 
 /* Data structure for the library configuration. */
 typedef struct
