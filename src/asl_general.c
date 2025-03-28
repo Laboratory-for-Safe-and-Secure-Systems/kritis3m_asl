@@ -72,11 +72,12 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
         default_config.psk.enable_dhe_psk = true;
         default_config.psk.use_external_callbacks = false;
         default_config.psk.enable_cert_auth = true;
+        default_config.psk.pre_extracted = false;
         default_config.psk.key = NULL;
         default_config.psk.identity = NULL;
         default_config.psk.callback_ctx = NULL;
-        default_config.psk.psk_client_cb = NULL;
-        default_config.psk.psk_server_cb = NULL;
+        default_config.psk.client_cb = NULL;
+        default_config.psk.server_cb = NULL;
 
         return default_config;
 }

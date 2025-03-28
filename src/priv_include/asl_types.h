@@ -51,14 +51,15 @@ struct asl_endpoint
         {
                 bool use_external_callbacks;
                 bool enable_cert_auth;
+                bool pre_extracted;
 
                 char* identity;
                 void* key; /* either a byte array containing the key or
                             * or the callback_ctx in case those are used */
                 size_t key_len;
 
-                asl_psk_client_callback_t psk_client_cb;
-                asl_psk_server_callback_t psk_server_cb;
+                asl_psk_client_callback_t client_cb;
+                asl_psk_server_callback_t server_cb;
 
         } psk;
 #endif

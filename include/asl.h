@@ -143,13 +143,14 @@ typedef struct
                 bool enable_dhe_psk;
                 bool enable_cert_auth;
                 bool use_external_callbacks;
+                bool pre_extracted;
 
                 char const* key;
                 char const* identity;
 
                 void* callback_ctx;
-                asl_psk_client_callback_t psk_client_cb;
-                asl_psk_server_callback_t psk_server_cb;
+                asl_psk_client_callback_t client_cb;
+                asl_psk_server_callback_t server_cb;
 
         } psk;
 

@@ -54,9 +54,9 @@ static int handle_external_callback_client(asl_session* session,
                 char identity_ext[64] = {0};
 
                 /* Execute the user callback */
-                ret = session->endpoint->psk.psk_client_cb(key_base64,
-                                                           identity_ext,
-                                                           session->endpoint->psk.key);
+                ret = session->endpoint->psk.client_cb(key_base64,
+                                                       identity_ext,
+                                                       session->endpoint->psk.key);
 
                 if (ret <= 0)
                         ERROR_OUT(-1, "PSK client callback failed");
@@ -150,9 +150,9 @@ static int handle_external_callback_server(asl_session* session,
                 identity_ext[ctx_len] = '\0';
 
                 /* Execute the user callback */
-                ret = session->endpoint->psk.psk_server_cb(key_base64,
-                                                           identity_ext,
-                                                           session->endpoint->psk.key);
+                ret = session->endpoint->psk.server_cb(key_base64,
+                                                       identity_ext,
+                                                       session->endpoint->psk.key);
                 if (ret <= 0)
                         ERROR_OUT(-1, "PSK server callback failed");
 
@@ -262,6 +262,14 @@ static int handle_local_key_client(asl_session* session,
                 memcpy(key, session->endpoint->psk.key, *key_len);
         }
 
+        /* Check if we have a pre-extracted PSK */
+        if (session->endpoint->psk.pre_extracted == true)
+        {
+                ret = wolfSSL_external_psk_pre_extracted(session->wolfssl_session, 1);
+                if (ret != 0)
+                        ERROR_OUT(-1, "Failed to use pre-extracted PSK: %d", ret);
+        }
+
 cleanup:
         return ret;
 }
@@ -310,6 +318,14 @@ static int handle_local_key_server(asl_session* session,
                 memcpy(key, session->endpoint->psk.key, *key_len);
         }
 
+        /* Check if we have a pre-extracted PSK */
+        if (session->endpoint->psk.pre_extracted == true)
+        {
+                ret = wolfSSL_external_psk_pre_extracted(session->wolfssl_session, 1);
+                if (ret != 0)
+                        ERROR_OUT(-1, "Failed to use pre-extracted PSK: %d", ret);
+        }
+
 cleanup:
         return ret;
 }
@@ -331,7 +347,7 @@ static int wolfssl_tls13_client_cb(WOLFSSL* ssl,
         if (session != NULL && session->endpoint != NULL)
         {
                 if (session->endpoint->psk.use_external_callbacks == true &&
-                    session->endpoint->psk.psk_client_cb != NULL)
+                    session->endpoint->psk.client_cb != NULL)
                 {
                         ret = handle_external_callback_client(session,
                                                               identity,
@@ -383,7 +399,7 @@ static int wolfssl_tls13_server_cb(WOLFSSL* ssl,
 
                 /* Check if we have a local PSK or if we have to use the external interface. */
                 if (session->endpoint->psk.use_external_callbacks == true &&
-                    session->endpoint->psk.psk_server_cb != NULL)
+                    session->endpoint->psk.server_cb != NULL)
                 {
                         ret = handle_external_callback_server(session, identity, context, ctx_len, key, key_len);
                 }
@@ -492,6 +508,8 @@ int psk_setup_general(asl_endpoint* endpoint, asl_endpoint_configuration const* 
                 goto cleanup;
 #endif
 
+        endpoint->psk.pre_extracted = config->psk.pre_extracted;
+
         return ASL_SUCCESS;
 
 cleanup:
@@ -521,13 +539,13 @@ int psk_setup_server(asl_endpoint* endpoint, asl_endpoint_configuration const* c
         }
 
         /* Set asl callback, to reference user implementation */
-        if (config->psk.use_external_callbacks && config->psk.psk_server_cb != NULL)
-                endpoint->psk.psk_server_cb = config->psk.psk_server_cb;
+        if (config->psk.use_external_callbacks && config->psk.server_cb != NULL)
+                endpoint->psk.server_cb = config->psk.server_cb;
         else
-                endpoint->psk.psk_server_cb = NULL;
+                endpoint->psk.server_cb = NULL;
 
         /* To avoid ambiguity, we set the PSK client callback here to NULL */
-        endpoint->psk.psk_client_cb = NULL;
+        endpoint->psk.client_cb = NULL;
 
 cleanup:
         return ret;
@@ -551,13 +569,13 @@ int psk_setup_client(asl_endpoint* endpoint, asl_endpoint_configuration const* c
                                                      wolfssl_tls13_client_cb);
 
         /* Set asl callback, to reference user implementation */
-        if (config->psk.use_external_callbacks && config->psk.psk_client_cb != NULL)
-                endpoint->psk.psk_client_cb = config->psk.psk_client_cb;
+        if (config->psk.use_external_callbacks && config->psk.client_cb != NULL)
+                endpoint->psk.client_cb = config->psk.client_cb;
         else
-                endpoint->psk.psk_client_cb = NULL;
+                endpoint->psk.client_cb = NULL;
 
         /* To avoid ambiguity, we set the PSK server callback here to NULL */
-        endpoint->psk.psk_server_cb = NULL;
+        endpoint->psk.server_cb = NULL;
 
         return ret;
 #else
