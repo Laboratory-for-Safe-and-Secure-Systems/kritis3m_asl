@@ -36,6 +36,9 @@ option(KRITIS3M_ASL_ENABLE_PKCS11 "Enable PKCS11 support" ON)
 # library liboqs. When disabled, the library will not be built.
 option(KRITIS3M_ASL_ENABLE_FALCON "Enable FALCON (FN-DSA) signature algorithm" ON)
 
+# When enabled, heap memory tracking and log prints are enabled.
+option(KRITIS3M_ASL_HEAP_TRACKING "Enable heap memory tracking" OFF)
+
 # Enable direct access to the WolfSSL API
 option(KRITIS3M_ASL_INTERNAL_API "Enable access to internal WolfSSL API" OFF)
 
@@ -71,6 +74,7 @@ else(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
         # Configuration
         set(KRITIS3M_WOLFSSL_STANDALONE ${KRITIS3M_ASL_STANDALONE})
         set(KRITIS3M_WOLFSSL_ENABLE_FALCON ${KRITIS3M_ASL_ENABLE_FALCON})
+        set(KRITIS3M_WOLFSSL_HEAP_TRACKING ${KRITIS3M_ASL_HEAP_TRACKING})
 
         # Actually add the external repositories to our project
         FetchContent_GetProperties(kritis3m_wolfssl)

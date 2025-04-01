@@ -361,6 +361,8 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         if (new_endpoint == NULL)
                 ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL endpoint");
 
+        TRACK_WOLFSS_HEAP_USAGE_START();
+
         /* Create the TLS server context */
         new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_server_method_ex(NULL), NULL);
         if (new_endpoint->wolfssl_context == NULL)
@@ -407,6 +409,8 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure key exchange curves");
 
+        TRACK_WOLFSS_HEAP_USAGE_END();
+
         return new_endpoint;
 
 cleanup:
@@ -433,6 +437,8 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         asl_endpoint* new_endpoint = malloc(sizeof(asl_endpoint));
         if (new_endpoint == NULL)
                 ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL endpoint");
+
+        TRACK_WOLFSS_HEAP_USAGE_START();
 
         /* Create the TLS client context */
         new_endpoint->wolfssl_context = wolfSSL_CTX_new_ex(wolfTLS_client_method_ex(NULL), NULL);
@@ -540,6 +546,8 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure key exchange curve");
 
+        TRACK_WOLFSS_HEAP_USAGE_END();
+
         return new_endpoint;
 
 cleanup:
@@ -553,6 +561,8 @@ void asl_free_endpoint(asl_endpoint* endpoint)
 {
         if (endpoint != NULL)
         {
+                TRACK_WOLFSS_HEAP_USAGE_START();
+
                 /* Properly cleanup PKCS#11 stuff */
                 pkcs11_endpoint_cleanup(endpoint);
 
@@ -572,6 +582,8 @@ void asl_free_endpoint(asl_endpoint* endpoint)
                         free(endpoint->ciphersuites);
 
                 free(endpoint);
+
+                TRACK_WOLFSS_HEAP_USAGE_END();
         }
 }
 

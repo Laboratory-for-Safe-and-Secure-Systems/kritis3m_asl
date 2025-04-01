@@ -3,5 +3,6 @@
 
 #cmakedefine KRITIS3M_ASL_ENABLE_PKCS11
 #cmakedefine KRITIS3M_ASL_INTERNAL_API
+#cmakedefine KRITIS3M_ASL_HEAP_TRACKING
 
 #endif // ASL_CONFIG_H

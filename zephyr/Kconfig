@@ -20,4 +20,10 @@ config KRITIS3M_ASL_INTERNAL_API
 	help
 	  This option enables access to the internal WolfSSL API in the KRITIS3M Abstract Security Library.
 
+config KRITIS3M_ASL_HEAP_TRACKING
+	bool "Enable heap memory tracking"
+	depends on KRITIS3M_ASL
+	help
+	  This option enables log messages to track the allocated heap memory of specific methods during runtine.
+
 endmenu

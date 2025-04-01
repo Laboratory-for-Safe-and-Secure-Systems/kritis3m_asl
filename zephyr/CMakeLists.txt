@@ -30,6 +30,10 @@ if(CONFIG_KRITIS3M_ASL)
                 set(KRITIS3M_ASL_ENABLE_INTERNAL_API ON)
         endif()
 
+        if (CONFIG_KRITIS3M_ASL_HEAP_TRACKING)
+                set(KRITIS3M_ASL_ENABLE_HEAP_TRACKING ON)
+        endif()
+
         zephyr_library_link_libraries(kritis3m_asl)
 
         # ToDo: these should not be accessable from the outside

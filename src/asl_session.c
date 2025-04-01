@@ -149,6 +149,8 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
         if (new_session == NULL)
                 ERROR_OUT(ASL_MEMORY_ERROR, "Unable to allocate memory for new WolfSSL session");
 
+        TRACK_WOLFSS_HEAP_USAGE_START();
+
         /* Create a new TLS session */
         new_session->wolfssl_session = wolfSSL_new(endpoint->wolfssl_context);
         if (new_session->wolfssl_session == NULL)
@@ -192,6 +194,8 @@ asl_session* asl_create_session(asl_endpoint* endpoint, int socket_fd)
         }
 #endif
 
+        TRACK_WOLFSS_HEAP_USAGE_END();
+
         return new_session;
 
 cleanup:
@@ -221,6 +225,8 @@ int asl_handshake(asl_session* session)
                 /* Get start time */
                 if (take_timestamp(&session->handshake_metrics.start_time) != 0)
                         asl_log(ASL_LOG_LEVEL_WRN, "Error starting handshake timer");
+
+                TRACK_WOLFSS_HEAP_USAGE_START();
         }
 
         while (ret != 0)
@@ -251,6 +257,8 @@ int asl_handshake(asl_session* session)
                                 session->external_psk.key = NULL;
                         }
 #endif
+
+                        TRACK_WOLFSS_HEAP_USAGE_END();
 
                         ret = ASL_SUCCESS;
                         break;
@@ -301,6 +309,8 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
         {
                 return ASL_ARGUMENT_ERROR;
         }
+
+        // TRACK_WOLFSS_HEAP_USAGE_START();
 
         while (1)
         {
@@ -362,6 +372,8 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
                 break;
         }
 
+        // TRACK_WOLFSS_HEAP_USAGE_END();
+
         return bytes_read;
 }
 
@@ -381,6 +393,8 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
         {
                 return ASL_ARGUMENT_ERROR;
         }
+
+        // TRACK_WOLFSS_HEAP_USAGE_START();
 
         while (size > 0)
         {
@@ -449,6 +463,8 @@ int asl_send(asl_session* session, uint8_t const* buffer, int size)
                         break;
                 }
         }
+
+        // TRACK_WOLFSS_HEAP_USAGE_END();
 
         return ret;
 }
@@ -536,6 +552,8 @@ void asl_free_session(asl_session* session)
 {
         if (session != NULL)
         {
+                TRACK_WOLFSS_HEAP_USAGE_START();
+
                 if (session->wolfssl_session != NULL)
                         wolfSSL_free(session->wolfssl_session);
 
@@ -554,6 +572,8 @@ void asl_free_session(asl_session* session)
 #endif
 
                 free(session);
+
+                TRACK_WOLFSS_HEAP_USAGE_END();
         }
 }
 

@@ -110,4 +110,33 @@ struct asl_session
 #define DEVICE_ID_OFFSET_SESSION DEVICE_ID_MAX_ENDPOINT
 #define DEVICE_ID_MAX_SESSION 10000
 
+#if defined(KRITIS3M_ASL_HEAP_TRACKING) && defined(WOLFSSL_TRACK_MEMORY)
+
+#define TRACK_WOLFSS_HEAP_USAGE_START()                                                            \
+        {                                                                                          \
+                long peak = wolfCrypt_heap_peakBytes_checkpoint();                                 \
+                long curr = wolfCrypt_heap_peakBytes_checkpoint();                                 \
+                (void) peak;                                                                       \
+                asl_log(ASL_LOG_LEVEL_INF, "%s (start): heap=%ld", __func__, curr);                \
+        }
+
+#define TRACK_WOLFSS_HEAP_USAGE_END()                                                              \
+        {                                                                                          \
+                long peak = wolfCrypt_heap_peakBytes_checkpoint();                                 \
+                long curr = wolfCrypt_heap_peakBytes_checkpoint();                                 \
+                asl_log(ASL_LOG_LEVEL_INF, "%s (end): heap=%ld, peak=%ld", __func__, curr, peak);  \
+        }
+
+#elif defined(KRITIS3M_ASL_HEAP_TRACKING) && !defined(WOLFSSL_TRACK_MEMORY)
+
+#warning "Heap tracking is enabled, but WOLFSSL_TRACK_MEMORY is not defined. No heap tracking will be done."
+#warning "Please enable WOLFSSL_TRACK_MEMORY in the wolfSSL build configuration."
+
+#else
+
+#define TRACK_WOLFSS_HEAP_USAGE_START()
+#define TRACK_WOLFSS_HEAP_USAGE_END()
+
+#endif
+
 #endif /* ASL_TYPES_H */
