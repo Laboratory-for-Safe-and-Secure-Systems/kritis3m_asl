@@ -292,6 +292,9 @@ KRITIS3M_ASL_API void asl_free_endpoint(asl_endpoint* endpoint);
 /* Print human-readable error message */
 KRITIS3M_ASL_API char const* asl_error_message(int error_code);
 
+// check if has pending data
+KRITIS3M_ASL_API int asl_pending(asl_session* session);
+
 /* Access to the internal WolfSSL API */
 #if defined(KRITIS3M_ASL_INTERNAL_API)
 

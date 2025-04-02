@@ -377,6 +377,15 @@ int asl_receive(asl_session* session, uint8_t* buffer, int max_size)
         return bytes_read;
 }
 
+int asl_pending(asl_session* session)
+{
+        if (session == NULL)
+        {
+                return ASL_ARGUMENT_ERROR;
+        }
+        return wolfSSL_pending(session->wolfssl_session);
+}
+
 /* Send data to the TLS remote peer.
  *
  * Returns ASL_SUCCESS on success, negative error code on failure (error message is logged
