@@ -192,7 +192,7 @@ int use_pkcs11_alt_private_key(asl_endpoint* endpoint,
                                asl_endpoint_configuration const* config,
                                char const* label)
 {
-#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11) && defined(WOLFSSL_DUAL_ALG_CERTS)
         int ret = 0;
 
         if (endpoint->pkcs11_module.device_id == INVALID_DEVID)
@@ -213,8 +213,7 @@ int use_pkcs11_alt_private_key(asl_endpoint* endpoint,
 cleanup:
         return ret;
 #else
-        asl_log(ASL_LOG_LEVEL_ERR,
-                "PKCS#11 support is not compiled in, please compile with support enabled");
+        asl_log(ASL_LOG_LEVEL_ERR, "PKCS#11 or DUAL_ALG_CERT support is not compiled in, please compile with support enabled");
 
         return ASL_PKCS11_ERROR;
 #endif

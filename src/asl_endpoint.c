@@ -215,6 +215,7 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
 
                         ret = use_pkcs11_private_key(endpoint, config, label);
 
+#ifdef WOLFSSL_DUAL_ALG_CERTS
                         /* Check if an alternative key label is also present */
                         label = strtok(NULL, PKCS11_LABEL_TERMINATOR);
                         if ((label != NULL) &&
@@ -227,6 +228,7 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
 
                                 ret = use_pkcs11_alt_private_key(endpoint, config, label);
                         }
+#endif
                 }
                 else
                 {
