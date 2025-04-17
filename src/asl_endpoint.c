@@ -159,12 +159,25 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         }
 
         /* Load root certificate */
-        if (config->root_certificate.buffer != NULL)
+        if (config->root_certificate.buffer != NULL && config->root_certificate.size > 0)
         {
-                ret = wolfSSL_CTX_load_verify_buffer(endpoint->wolfssl_context,
-                                                     config->root_certificate.buffer,
-                                                     config->root_certificate.size,
-                                                     WOLFSSL_FILETYPE_PEM);
+                /* Check if we have a PEM or DER file */
+                if (memcmp(config->root_certificate.buffer, "-----", 5) == 0)
+                {
+                        /* PEM file */
+                        ret = wolfSSL_CTX_load_verify_buffer(endpoint->wolfssl_context,
+                                                             config->root_certificate.buffer,
+                                                             config->root_certificate.size,
+                                                             WOLFSSL_FILETYPE_PEM);
+                }
+                else
+                {
+                        /* DER file */
+                        ret = wolfSSL_CTX_load_verify_buffer(endpoint->wolfssl_context,
+                                                             config->root_certificate.buffer,
+                                                             config->root_certificate.size,
+                                                             WOLFSSL_FILETYPE_ASN1);
+                }
                 if (wolfssl_check_for_error(ret))
                         ERROR_OUT(ASL_CERTIFICATE_ERROR, "Unable to load root certificate");
         }
@@ -187,12 +200,27 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                 }
                 else
                 {
-                        ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
-                                                                              config->device_certificate_chain
-                                                                                      .buffer,
-                                                                              config->device_certificate_chain
-                                                                                      .size,
-                                                                              WOLFSSL_FILETYPE_PEM);
+                        /* Check if we have a PEM or DER file */
+                        if (memcmp(config->device_certificate_chain.buffer, "-----", 5) == 0)
+                        {
+                                /* PEM file */
+                                ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
+                                                                                      config->device_certificate_chain
+                                                                                              .buffer,
+                                                                                      config->device_certificate_chain
+                                                                                              .size,
+                                                                                      WOLFSSL_FILETYPE_PEM);
+                        }
+                        else
+                        {
+                                /* DER file */
+                                ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
+                                                                                      config->device_certificate_chain
+                                                                                              .buffer,
+                                                                                      config->device_certificate_chain
+                                                                                              .size,
+                                                                                      WOLFSSL_FILETYPE_ASN1);
+                        }
                 }
 
                 if (wolfssl_check_for_error(ret))
@@ -233,10 +261,22 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                 else
                 {
                         /* Load the private key from the buffer */
-                        ret = wolfSSL_CTX_use_PrivateKey_buffer(endpoint->wolfssl_context,
-                                                                config->private_key.buffer,
-                                                                config->private_key.size,
-                                                                WOLFSSL_FILETYPE_PEM);
+                        if (memcmp(config->private_key.buffer, "-----", 5) == 0)
+                        {
+                                /* PEM file */
+                                ret = wolfSSL_CTX_use_PrivateKey_buffer(endpoint->wolfssl_context,
+                                                                        config->private_key.buffer,
+                                                                        config->private_key.size,
+                                                                        WOLFSSL_FILETYPE_PEM);
+                        }
+                        else
+                        {
+                                /* DER file */
+                                ret = wolfSSL_CTX_use_PrivateKey_buffer(endpoint->wolfssl_context,
+                                                                        config->private_key.buffer,
+                                                                        config->private_key.size,
+                                                                        WOLFSSL_FILETYPE_ASN1);
+                        }
                 }
                 privateKeyLoaded = true;
 
@@ -264,10 +304,22 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                 else
                 {
                         /* Load the alternative private key from the buffer */
-                        ret = wolfSSL_CTX_use_AltPrivateKey_buffer(endpoint->wolfssl_context,
-                                                                   config->private_key.additional_key_buffer,
-                                                                   config->private_key.additional_key_size,
-                                                                   WOLFSSL_FILETYPE_PEM);
+                        if (memcmp(config->private_key.additional_key_buffer, "-----", 5) == 0)
+                        {
+                                /* PEM file */
+                                ret = wolfSSL_CTX_use_AltPrivateKey_buffer(endpoint->wolfssl_context,
+                                                                           config->private_key.additional_key_buffer,
+                                                                           config->private_key.additional_key_size,
+                                                                           WOLFSSL_FILETYPE_PEM);
+                        }
+                        else
+                        {
+                                /* DER file */
+                                ret = wolfSSL_CTX_use_AltPrivateKey_buffer(endpoint->wolfssl_context,
+                                                                           config->private_key.additional_key_buffer,
+                                                                           config->private_key.additional_key_size,
+                                                                           WOLFSSL_FILETYPE_ASN1);
+                        }
                 }
 
                 if (wolfssl_check_for_error(ret))
