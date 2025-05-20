@@ -242,10 +242,11 @@ static int handle_local_key_client(asl_session* session,
                    PKCS11_LABEL_IDENTIFIER_LEN - 1) == 0)
         {
 #ifdef WOLF_PRIVATE_KEY_ID
-                /* Use the identifier as the PKCS#11 label */
-                ret = wolfSSL_use_external_psk_label(session->wolfssl_session,
-                                                     session->endpoint->psk.identity,
-                                                     session->endpoint->pkcs11_module.device_id);
+                /* Use the identifier as the PKCS#11 id */
+                ret = wolfSSL_use_external_psk_id(session->wolfssl_session,
+                                                  (uint8_t*) session->endpoint->psk.identity,
+                                                  strlen(session->endpoint->psk.identity),
+                                                  session->endpoint->pkcs11_module.device_id);
                 if (ret != 0)
                         ERROR_OUT(-1, "Failed to use PSK key label: %d", ret);
 #else
