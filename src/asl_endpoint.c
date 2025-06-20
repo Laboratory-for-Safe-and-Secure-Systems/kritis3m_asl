@@ -202,6 +202,7 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         /* Load device certificate chain */
         if (config->device_certificate_chain.buffer != NULL)
         {
+                /* Check for PKCS#11 identifier */
                 if (strncmp((char const*) config->device_certificate_chain.buffer,
                             PKCS11_LABEL_IDENTIFIER,
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
@@ -215,29 +216,26 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
 
                         ret = use_pkcs11_certificate_chain(endpoint, config, label);
                 }
+                /* Check if we have a PEM or DER file */
+                else if (memcmp(config->device_certificate_chain.buffer, "-----", 5) == 0)
+                {
+                        /* PEM file */
+                        ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
+                                                                              config->device_certificate_chain
+                                                                                      .buffer,
+                                                                              config->device_certificate_chain
+                                                                                      .size,
+                                                                              WOLFSSL_FILETYPE_PEM);
+                }
                 else
                 {
-                        /* Check if we have a PEM or DER file */
-                        if (memcmp(config->device_certificate_chain.buffer, "-----", 5) == 0)
-                        {
-                                /* PEM file */
-                                ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
-                                                                                      config->device_certificate_chain
-                                                                                              .buffer,
-                                                                                      config->device_certificate_chain
-                                                                                              .size,
-                                                                                      WOLFSSL_FILETYPE_PEM);
-                        }
-                        else
-                        {
-                                /* DER file */
-                                ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
-                                                                                      config->device_certificate_chain
-                                                                                              .buffer,
-                                                                                      config->device_certificate_chain
-                                                                                              .size,
-                                                                                      WOLFSSL_FILETYPE_ASN1);
-                        }
+                        /* DER file */
+                        ret = wolfSSL_CTX_use_certificate_chain_buffer_format(endpoint->wolfssl_context,
+                                                                              config->device_certificate_chain
+                                                                                      .buffer,
+                                                                              config->device_certificate_chain
+                                                                                      .size,
+                                                                              WOLFSSL_FILETYPE_ASN1);
                 }
 
                 if (wolfssl_check_for_error(ret))
@@ -248,6 +246,7 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         bool privateKeyLoaded = false;
         if (config->private_key.buffer != NULL)
         {
+                /* Check for PKCS#11 identifier */
                 if (strncmp((char const*) config->private_key.buffer,
                             PKCS11_LABEL_IDENTIFIER,
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
@@ -275,26 +274,24 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                         }
 #endif
                 }
+                /* Load the private key from the buffer */
+                else if (memcmp(config->private_key.buffer, "-----", 5) == 0)
+                {
+                        /* PEM file */
+                        ret = wolfSSL_CTX_use_PrivateKey_buffer(endpoint->wolfssl_context,
+                                                                config->private_key.buffer,
+                                                                config->private_key.size,
+                                                                WOLFSSL_FILETYPE_PEM);
+                }
                 else
                 {
-                        /* Load the private key from the buffer */
-                        if (memcmp(config->private_key.buffer, "-----", 5) == 0)
-                        {
-                                /* PEM file */
-                                ret = wolfSSL_CTX_use_PrivateKey_buffer(endpoint->wolfssl_context,
-                                                                        config->private_key.buffer,
-                                                                        config->private_key.size,
-                                                                        WOLFSSL_FILETYPE_PEM);
-                        }
-                        else
-                        {
-                                /* DER file */
-                                ret = wolfSSL_CTX_use_PrivateKey_buffer(endpoint->wolfssl_context,
-                                                                        config->private_key.buffer,
-                                                                        config->private_key.size,
-                                                                        WOLFSSL_FILETYPE_ASN1);
-                        }
+                        /* DER file */
+                        ret = wolfSSL_CTX_use_PrivateKey_buffer(endpoint->wolfssl_context,
+                                                                config->private_key.buffer,
+                                                                config->private_key.size,
+                                                                WOLFSSL_FILETYPE_ASN1);
                 }
+
                 privateKeyLoaded = true;
 
                 if (wolfssl_check_for_error(ret))
@@ -305,6 +302,7 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         /* Load the alternative private key */
         if (config->private_key.additional_key_buffer != NULL)
         {
+                /* Check for PKCS#11 identifier */
                 if (strncmp((char const*) config->private_key.additional_key_buffer,
                             PKCS11_LABEL_IDENTIFIER,
                             PKCS11_LABEL_IDENTIFIER_LEN) == 0)
@@ -318,25 +316,22 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
 
                         ret = use_pkcs11_alt_private_key(endpoint, config, label);
                 }
+                /* Load the alternative private key from the buffer */
+                else if (memcmp(config->private_key.additional_key_buffer, "-----", 5) == 0)
+                {
+                        /* PEM file */
+                        ret = wolfSSL_CTX_use_AltPrivateKey_buffer(endpoint->wolfssl_context,
+                                                                   config->private_key.additional_key_buffer,
+                                                                   config->private_key.additional_key_size,
+                                                                   WOLFSSL_FILETYPE_PEM);
+                }
                 else
                 {
-                        /* Load the alternative private key from the buffer */
-                        if (memcmp(config->private_key.additional_key_buffer, "-----", 5) == 0)
-                        {
-                                /* PEM file */
-                                ret = wolfSSL_CTX_use_AltPrivateKey_buffer(endpoint->wolfssl_context,
-                                                                           config->private_key.additional_key_buffer,
-                                                                           config->private_key.additional_key_size,
-                                                                           WOLFSSL_FILETYPE_PEM);
-                        }
-                        else
-                        {
-                                /* DER file */
-                                ret = wolfSSL_CTX_use_AltPrivateKey_buffer(endpoint->wolfssl_context,
-                                                                           config->private_key.additional_key_buffer,
-                                                                           config->private_key.additional_key_size,
-                                                                           WOLFSSL_FILETYPE_ASN1);
-                        }
+                        /* DER file */
+                        ret = wolfSSL_CTX_use_AltPrivateKey_buffer(endpoint->wolfssl_context,
+                                                                   config->private_key.additional_key_buffer,
+                                                                   config->private_key.additional_key_size,
+                                                                   WOLFSSL_FILETYPE_ASN1);
                 }
 
                 if (wolfssl_check_for_error(ret))
