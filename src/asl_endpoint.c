@@ -142,7 +142,24 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         }
         else
                 endpoint->keylog_file = NULL;
-#endif
+
+#if !defined(__ZEPHYR__) && !defined(_WIN32)
+        /* Check if the SSLKEYLOGFILE environment variable */
+        if (endpoint->keylog_file == NULL)
+        {
+                char* env_keylog_file = getenv("SSLKEYLOGFILE");
+                if (env_keylog_file != NULL)
+                {
+                        endpoint->keylog_file = (char*) malloc(strlen(env_keylog_file) + 1);
+                        if (endpoint->keylog_file == NULL)
+                                ERROR_OUT(ASL_MEMORY_ERROR,
+                                          "Unable to allocate memory for keylog file name");
+
+                        strcpy(endpoint->keylog_file, env_keylog_file);
+                }
+        }
+#endif /* !__ZEPHYR && !_WIN32 */
+#endif /* HAVE_SECRET_CALLBACK */
 
         /* Only allow TLS version 1.3 */
         ret = wolfSSL_CTX_SetMinVersion(endpoint->wolfssl_context, WOLFSSL_TLSV1_3);
