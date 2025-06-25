@@ -266,9 +266,13 @@ static int handle_local_key_client(asl_session* session,
         /* Check if we have a pre-extracted PSK */
         if (session->endpoint->psk.pre_extracted == true)
         {
+#ifdef WOLF_PRIVATE_KEY_ID
                 ret = wolfSSL_external_psk_pre_extracted(session->wolfssl_session, 1);
                 if (ret != 0)
                         ERROR_OUT(-1, "Failed to use pre-extracted PSK: %d", ret);
+#else
+                ERROR_OUT(-1, "PKCS#11 support not enabled", ret);
+#endif
         }
 
 cleanup:
@@ -323,9 +327,13 @@ static int handle_local_key_server(asl_session* session,
         /* Check if we have a pre-extracted PSK */
         if (session->endpoint->psk.pre_extracted == true)
         {
+#ifdef WOLF_PRIVATE_KEY_ID
                 ret = wolfSSL_external_psk_pre_extracted(session->wolfssl_session, 1);
                 if (ret != 0)
                         ERROR_OUT(-1, "Failed to use pre-extracted PSK: %d", ret);
+#else
+                ERROR_OUT(-1, "PKCS#11 support not enabled", ret);
+#endif
         }
 
 cleanup:
