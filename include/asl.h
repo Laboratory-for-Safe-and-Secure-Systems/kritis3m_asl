@@ -133,6 +133,7 @@ typedef struct
         {
                 char const* module_path;
                 char const* module_pin;
+                int slot_id;
                 bool use_for_all;
 
         } pkcs11;

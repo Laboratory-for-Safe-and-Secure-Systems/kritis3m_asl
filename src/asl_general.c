@@ -53,6 +53,7 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
 
         default_config.pkcs11.module_path = NULL;
         default_config.pkcs11.module_pin = NULL;
+        default_config.pkcs11.slot_id = -1;
         default_config.pkcs11.use_for_all = false;
 
         default_config.device_certificate_chain.buffer = NULL;

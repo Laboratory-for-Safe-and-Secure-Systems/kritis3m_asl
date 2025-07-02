@@ -78,7 +78,7 @@ int configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                 /* Initialize the token */
                 ret = wc_Pkcs11Token_Init(&endpoint->pkcs11_module.token,
                                           &endpoint->pkcs11_module.device,
-                                          -1,
+                                          config->pkcs11.slot_id,
                                           NULL,
                                           (uint8_t const* const) config->pkcs11.module_pin,
                                           pin_length);
@@ -93,7 +93,7 @@ int configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                         ERROR_OUT(ASL_PKCS11_ERROR, "Unable to register PKCS#11 callback: %d", ret);
 
                 /* Create a persistent session with the secure element */
-                ret = wc_Pkcs11Token_Open(&endpoint->pkcs11_module.token, 1);
+                ret = wc_Pkcs11Token_Open(&endpoint->pkcs11_module.token, 0);
                 if (ret == 0)
                 {
                         endpoint->pkcs11_module.initialized = true;
