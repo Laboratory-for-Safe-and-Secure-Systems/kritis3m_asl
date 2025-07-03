@@ -128,6 +128,7 @@ typedef struct
         bool mutual_authentication;
         enum asl_key_exchange_method key_exchange_method;
         char const* ciphersuites;
+        char const* server_name;
 
         struct
         {

@@ -404,6 +404,23 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         if (wolfssl_check_for_error(ret))
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure cipher suites");
 
+        if (config->server_name != NULL)
+        {
+#if defined(HAVE_SNI)
+
+                ret = wolfSSL_CTX_UseSNI(endpoint->wolfssl_context,
+                                         WOLFSSL_SNI_HOST_NAME,
+                                         config->server_name,
+                                         strlen(config->server_name));
+                if (wolfssl_check_for_error(ret))
+                        ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure SNI hostname");
+#else
+                asl_log(ASL_LOG_LEVEL_WRN,
+                        "SNI is not supported by the WolfSSL build, server name will be ignored");
+
+#endif
+        }
+
         return ASL_SUCCESS;
 
 cleanup:
