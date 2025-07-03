@@ -124,6 +124,33 @@ cleanup:
 
 #endif /* KRITIS3M_ASL_ENABLE_PKCS11 */
 
+int use_pkcs11_root_certificates(asl_endpoint* endpoint, asl_endpoint_configuration const* config)
+{
+#if defined(KRITIS3M_ASL_ENABLE_PKCS11) && defined(HAVE_PKCS11)
+        int ret = 0;
+
+        /* Initialize the PKCS#11 module */
+        ret = configure_pkcs11_endpoint(endpoint, config);
+        if (ret != 0)
+                ERROR_OUT(ASL_PKCS11_ERROR, "Failed to configure PKCS#11 crypto module");
+
+        asl_log(ASL_LOG_LEVEL_DBG, "Using external root certificates");
+
+        /* Load root certificates from the secure element */
+        ret = wolfSSL_CTX_load_verify_dev(endpoint->wolfssl_context, endpoint->pkcs11_module.device_id);
+        if (wolfssl_check_for_error(ret))
+                ERROR_OUT(ASL_CERTIFICATE_ERROR,
+                          "Unable to load root certificates from PKCS#11 device");
+        asl_log(ASL_LOG_LEVEL_INF, "Root certificates loaded from PKCS#11 device");
+cleanup:
+        return ret;
+#else
+        asl_log(ASL_LOG_LEVEL_ERR,
+                "PKCS#11 support is not compiled in, please compile with support enabled");
+        return ASL_PKCS11_ERROR;
+#endif
+}
+
 int use_pkcs11_certificate_chain(asl_endpoint* endpoint,
                                  asl_endpoint_configuration const* config,
                                  char const* label)

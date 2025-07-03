@@ -11,6 +11,8 @@
 
 int configure_pkcs11_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
 
+int use_pkcs11_root_certificates(asl_endpoint* endpoint, asl_endpoint_configuration const* config);
+
 int use_pkcs11_certificate_chain(asl_endpoint* endpoint,
                                  asl_endpoint_configuration const* config,
                                  char const* label);

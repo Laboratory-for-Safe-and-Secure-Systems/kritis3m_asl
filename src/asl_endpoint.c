@@ -180,8 +180,16 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
         /* Load root certificate */
         if (config->root_certificate.buffer != NULL && config->root_certificate.size > 0)
         {
+                /* Check for PKCS#11 identifier. `-1` on the IDENTIFIER_LEN to exclude the ":" at
+                 * the end, as we don't have a label for root certs. */
+                if (strncmp((char const*) config->root_certificate.buffer,
+                            PKCS11_LABEL_IDENTIFIER,
+                            PKCS11_LABEL_IDENTIFIER_LEN - 1) == 0)
+                {
+                        ret = use_pkcs11_root_certificates(endpoint, config);
+                }
                 /* Check if we have a PEM or DER file */
-                if (memcmp(config->root_certificate.buffer, "-----", 5) == 0)
+                else if (memcmp(config->root_certificate.buffer, "-----", 5) == 0)
                 {
                         /* PEM file */
                         ret = wolfSSL_CTX_load_verify_buffer(endpoint->wolfssl_context,
