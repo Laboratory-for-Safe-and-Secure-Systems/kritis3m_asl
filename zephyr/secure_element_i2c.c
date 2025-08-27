@@ -47,6 +47,18 @@ I2C_RV setupI2C(i2cParameters* params)
 
         SCardConnect(hContext, szReader, dwShareMode, dwPreferredProtocols, phCard, pdwActiveProtocol);
 
+        int32_t resp_status = 0; /* Communication Response status */
+
+        /*------- Send IFSD request --------------------------------------------------*/
+
+        /* Negotiate IFSD: we indicate to the card a new IFSD that the reader can support */
+        resp_status = T1_Negotiate_IFSD(&SCInterface, NAD, IFSD_VALUE);
+
+        /* If the IFSD request communication has failed */
+        if (resp_status < 0)
+        {
+                /* ---IFSD communication error--- */
+        }
 
         return I2C_S_SUCCESS;
 }
@@ -57,21 +69,20 @@ I2C_RV I2C_RW(void* context, unsigned char* packet, int packetLength, unsigned c
         sendPci.dwProtocol = SCARD_PROTOCOL_T1;
         sendPci.cbPciLength = sizeof(SCARD_IO_REQUEST);
 
-        const unsigned char apdu_command[] = {0x00, 0xC1, 0x01, 0xFE, 0x3E};
-
         DWORD RecvLength = 100;
 
         SCARDHANDLE hCard = *phCard;
         const SCARD_IO_REQUEST* pioSendPci = &sendPci;
-        LPCBYTE pbSendBuffer = apdu_command;       // buffer that has to be transmitted
-        DWORD cbSendLength = sizeof(pbSendBuffer); // length of the pbSendBuffer
+        LPCBYTE pbSendBuffer = packet;       // buffer that has to be transmitted
+        DWORD cbSendLength = packetLength; // length of the pbSendBuffer
         SCARD_IO_REQUEST* pioRecvPci;              // out
         LPBYTE pbRecvBuffer;                       // out
         LPDWORD pcbRecvLength = &RecvLength;       // expected maximum received answer length
 
-        SCardTransmit(hCard, pioSendPci, packet, packetLength, pioRecvPci, response, pcbRecvLength);
+        SCardTransmit(hCard, pioSendPci, pbSendBuffer, cbSendLength, pioRecvPci, pbRecvBuffer, pcbRecvLength);
 
         *responseLength = sizeof(response);
+        memcpy(response, pbRecvBuffer, *responseLength);
 
         return I2C_S_SUCCESS;
         // const struct device* const dev = DEVICE_DT_GET(DT_ALIAS(pico_i2c));
