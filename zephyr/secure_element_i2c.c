@@ -81,7 +81,7 @@ I2C_RV I2C_RW(void* context, unsigned char* packet, int packetLength, unsigned c
 
         SCardTransmit(hCard, pioSendPci, pbSendBuffer, cbSendLength, pioRecvPci, pbRecvBuffer, pcbRecvLength);
 
-        *responseLength = sizeof(response);
+        *responseLength = *pcbRecvLength;
         memcpy(response, pbRecvBuffer, *responseLength);
 
         return I2C_S_SUCCESS;
