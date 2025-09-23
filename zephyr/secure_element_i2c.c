@@ -2,44 +2,31 @@
 #if defined(__ZEPHYR__) && defined(CONFIG_SECURE_ELEMENT_SUPPORT)
 
 #include "CardOS_IoT_I2C_driver.h"
-#include <zephyr/drivers/i2c.h>
-#include "T1_main.h"
-#include "T1_protocol_param.h"
 #include "winscard.h"
+#include <zephyr/drivers/i2c.h>
 
-LPSCARDHANDLE phCard;
-SCARDHANDLE hCard = 1;
+static SCARDCONTEXT hContext = 0;
+static SCARDHANDLE hCard = 0;
 
 I2C_RV setupI2C(i2cParameters* params)
 {
         params->address = 0x38;
-        //Init
-        DWORD dwScope = SCARD_SCOPE_GLOBAL;
-        LPSCARDCONTEXT phContext = NULL;
-        SCardEstablishContext(dwScope, NULL, NULL, phContext);
 
-        //A2R
-        SCARDCONTEXT hContext = NULL;
         LPCSTR szReader = "testReader";
         DWORD dwPreferredProtocols = SCARD_PROTOCOL_T1;
-        phCard = &hCard;
-        LPDWORD pdwActiveProtocol = NULL;
+        DWORD dwActiveProtocol;
         DWORD dwShareMode = SCARD_SHARE_EXCLUSIVE;
+        LONG res;
 
-        SCardConnect(hContext, szReader, dwShareMode, dwPreferredProtocols, phCard, pdwActiveProtocol);
+        /* Init */
+        res = SCardEstablishContext(SCARD_SCOPE_GLOBAL, NULL, NULL, &hContext);
+        if (res != SCARD_S_SUCCESS)
+                return I2C_E_CONFIG_ERROR;
 
-        int32_t resp_status = 0; /* Communication Response status */
-
-        /*------- Send IFSD request --------------------------------------------------*/
-
-        /* Negotiate IFSD: we indicate to the card a new IFSD that the reader can support */
-        resp_status = T1_Negotiate_IFSD(&SCInterface, NAD, IFSD_VALUE);
-
-        /* If the IFSD request communication has failed */
-        if (resp_status < 0)
-        {
-                /* ---IFSD communication error--- */
-        }
+        /* A2R */
+        res = SCardConnect(hContext, szReader, dwShareMode, dwPreferredProtocols, &hCard, &dwActiveProtocol);
+        if ((res != SCARD_S_SUCCESS) || (dwActiveProtocol != SCARD_PROTOCOL_T1))
+                return I2C_E_CONFIG_ERROR;
 
         return I2C_S_SUCCESS;
 }
@@ -50,25 +37,27 @@ I2C_RV I2C_RW(void* context, unsigned char* packet, int packetLength, unsigned c
         sendPci.dwProtocol = SCARD_PROTOCOL_T1;
         sendPci.cbPciLength = sizeof(SCARD_IO_REQUEST);
 
-        DWORD RecvLength = 512;
+        SCARD_IO_REQUEST recvPci;
 
-        const SCARD_IO_REQUEST* pioSendPci = &sendPci;
-        LPCBYTE pbSendBuffer = packet;       // buffer that has to be transmitted
-        DWORD cbSendLength = packetLength - 1; // length of the pbSendBuffer
-        SCARD_IO_REQUEST* pioRecvPci;              // out
-        LPBYTE pbRecvBuffer;                       // out
         BYTE recvBuffer[512];
-        LPDWORD pcbRecvLength = &RecvLength;       // expected maximum received answer length
+        DWORD recvLength = sizeof(recvBuffer);
 
-        SCardTransmit(hCard, pioSendPci, pbSendBuffer, cbSendLength, pioRecvPci, recvBuffer, pcbRecvLength);
+        LONG res;
+
+        /* Send the APDU, stored in the `packet` buffer (the buffer includes an already calculated
+         * LRC byte). Reduce the length by one to exclude this last LRC byte. The APDU response is
+         * stored in the temporary buffer `recvBuffer`. */
+        res = SCardTransmit(hCard, &sendPci, packet, packetLength - 1, &recvPci, recvBuffer, &recvLength);
+        if (res != SCARD_S_SUCCESS)
+                return I2C_E_RW_ERROR;
 
         /* Build the I2C frame */
-        response[0] = (*pcbRecvLength >> 8) & 0xFF;
-        response[1] = *pcbRecvLength & 0xFF;
-        memcpy(&response[2], recvBuffer, *pcbRecvLength);
-        response[2 + *pcbRecvLength] = calculateLrcI2C(response, 2 + *pcbRecvLength, 0x00);
+        response[0] = (recvLength >> 8) & 0xFF;
+        response[1] = recvLength & 0xFF;
+        memcpy(&response[2], recvBuffer, recvLength);
+        response[2 + recvLength] = calculateLrcI2C(response, 2 + recvLength, 0x00);
 
-        *responseLength = *pcbRecvLength + 3;
+        *responseLength = recvLength + 3;
 
         return I2C_S_SUCCESS;
 }
