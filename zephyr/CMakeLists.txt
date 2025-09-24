@@ -20,9 +20,6 @@ if(CONFIG_KRITIS3M_ASL)
 
         # Add PKCS11 related stuff
         if(CONFIG_KRITIS3M_ASL_PKCS11)
-                zephyr_library_sources(
-                        ${ZEPHYR_CURRENT_MODULE_DIR}/zephyr/secure_element_i2c.c
-                )
                 set(KRITIS3M_ASL_ENABLE_PKCS11 ON)
         endif()
 
