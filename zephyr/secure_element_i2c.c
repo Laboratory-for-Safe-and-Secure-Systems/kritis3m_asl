@@ -55,7 +55,7 @@ I2C_RV I2C_RW(void* context, unsigned char* packet, int packetLength, unsigned c
         response[0] = (recvLength >> 8) & 0xFF;
         response[1] = recvLength & 0xFF;
         memcpy(&response[2], recvBuffer, recvLength);
-        response[2 + recvLength] = calculateLrcI2C(response, 2 + recvLength, 0x00);
+        calculateLrcI2C(response, 3 + recvLength, 1);
 
         *responseLength = recvLength + 3;
 
