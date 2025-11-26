@@ -26,4 +26,10 @@ config KRITIS3M_ASL_HEAP_TRACKING
 	help
 	  This option enables log messages to track the allocated heap memory of specific methods during runtine.
 
+config KRITIS3M_ASL_CONSTANT_PRNG
+	bool "Enable constant PRNG for testing (!!! INSECURE !!!)"
+	depends on KRITIS3M_ASL
+	help
+	  This option enables a constant Pseudo-Random Number Generator (PRNG) for testing purposes.
+
 endmenu
