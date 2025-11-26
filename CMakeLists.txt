@@ -45,6 +45,9 @@ option(KRITIS3M_ASL_INTERNAL_API "Enable access to internal WolfSSL API" OFF)
 # Create a combined static library that includes all dependencies
 option(KRITIS3M_ASL_COMBINED_STATIC_LIB "Create a combined static library" OFF)
 
+# When enabled, all WolfSSL pseudo-random number generators (PRNGs) are seeded with
+# a special value for testing purposes (so all test runs have the same random output).
+option(KRITIS3M_ASL_CONSTANT_PRNG "Use a constant PRNG seed for testing purposes (!!! INSECURE !!!)" OFF)
 
 # Make sure all libraries are installed in the lib directory (not lib64)
 set(CMAKE_INSTALL_LIBDIR "lib")
@@ -75,6 +78,7 @@ else(KRITIS3M_ASL_EXTERNAL_WOLFSSL)
         set(KRITIS3M_WOLFSSL_STANDALONE ${KRITIS3M_ASL_STANDALONE})
         set(KRITIS3M_WOLFSSL_ENABLE_FALCON ${KRITIS3M_ASL_ENABLE_FALCON})
         set(KRITIS3M_WOLFSSL_HEAP_TRACKING ${KRITIS3M_ASL_HEAP_TRACKING})
+        set(KRITIS3M_WOLFSSL_CONSTANT_PRNG ${KRITIS3M_ASL_CONSTANT_PRNG})
 
         # Actually add the external repositories to our project
         FetchContent_GetProperties(kritis3m_wolfssl)

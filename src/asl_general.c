@@ -164,3 +164,33 @@ void asl_cleanup(void)
 
         /* Nothing more to do at the moment... */
 }
+
+#if defined(KRITIS3M_ASL_CONSTANT_PRNG)
+
+/* A constant seed for the PRNG for testing purposes (!!! INSECURE !!!) */
+
+int rand_gen_seed(unsigned char* output, int sz)
+{
+        static uint32_t seed_counter = 0;
+
+        seed_counter++;
+
+        uint32_t rem = sz;
+
+        while (rem >= sizeof(uint32_t))
+        {
+                uint32_t counter_value = seed_counter;
+                memcpy(output + (sz - rem), &counter_value, sizeof(uint32_t));
+                rem -= sizeof(uint32_t);
+                seed_counter++;
+        }
+
+        if (rem > 0)
+        {
+                uint32_t counter_value = seed_counter;
+                memcpy(output + (sz - rem), &counter_value, rem);
+        }
+
+        return 0;
+}
+#endif
