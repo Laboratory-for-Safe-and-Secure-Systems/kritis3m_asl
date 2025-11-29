@@ -30,6 +30,12 @@
                 goto cleanup;                                                                      \
         }
 
+#if defined(KRITIS3M_ASL_CONSTANT_PRNG)
+
+static uint32_t seed_counter = 0;
+
+#endif
+
 /* Create the default config for the Agile Security Library (asl). */
 asl_configuration asl_default_config(void)
 {
@@ -94,6 +100,11 @@ asl_endpoint_configuration asl_default_endpoint_config(void)
 int asl_init(asl_configuration const* config)
 {
         int ret = 0;
+
+#if defined(KRITIS3M_ASL_CONSTANT_PRNG)
+        /* Reset the seed counter for the constant PRNG*/
+        seed_counter = 0;
+#endif
 
         /* Configure the logging interface */
         ret = asl_prepare_logging(config);
@@ -171,8 +182,7 @@ void asl_cleanup(void)
 
 int rand_gen_seed(unsigned char* output, int sz)
 {
-        static uint32_t seed_counter = 0;
-
+        /* Increment the static seed counter */
         seed_counter++;
 
         uint32_t rem = sz;
