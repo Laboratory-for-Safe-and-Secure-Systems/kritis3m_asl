@@ -223,9 +223,17 @@ static int handle_local_key_client(asl_session* session,
 
                 if (ret == 0)
                 {
+#if defined(KRITIS3M_ASL_CONSTANT_PRNG)
+                        /* For testing purposes only, fill with constant data. This prevents the
+                         * PRNG from being influenced due to the context fill, ensuring comparable
+                         * benchmark results to the no PSK setups. */
+                        memset(context, 0xAA, LOCAL_PSK_ENTORY_SIZE);
+#else
+
                         ret = wc_RNG_GenerateBlock(wolfSSL_GetRNG(session->wolfssl_session),
                                                    context,
                                                    LOCAL_PSK_ENTORY_SIZE);
+#endif
                 }
                 if (ret == 0)
                 {
