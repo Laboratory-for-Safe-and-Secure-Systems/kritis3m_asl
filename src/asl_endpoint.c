@@ -423,7 +423,7 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
                 if (wolfssl_check_for_error(ret))
                         ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure SNI hostname");
 #else
-                asl_log(ASL_LOG_LEVEL_WRN,
+                asl_log(ASL_LOG_LEVEL_DBG,
                         "SNI is not supported by the WolfSSL build, server name will be ignored");
 
 #endif
