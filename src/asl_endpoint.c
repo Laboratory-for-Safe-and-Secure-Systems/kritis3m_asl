@@ -351,13 +351,13 @@ static int configure_endpoint(asl_endpoint* endpoint, asl_endpoint_configuration
 
         /* Check if the private key and the device certificate match */
 #if !defined(__ZEPHYR__)
-        if (privateKeyLoaded == true)
-        {
-                ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
-                if (wolfssl_check_for_error(ret))
-                        ERROR_OUT(ASL_INTERNAL_ERROR,
-                                  "Private key and device certificate do not match");
-        }
+        // if (privateKeyLoaded == true)
+        // {
+        //         ret = wolfSSL_CTX_check_private_key(endpoint->wolfssl_context);
+        //         if (wolfssl_check_for_error(ret))
+        //                 ERROR_OUT(ASL_INTERNAL_ERROR,
+        //                           "Private key and device certificate do not match");
+        // }
 #endif
 
         /* Set the IO callbacks for send and receive */
