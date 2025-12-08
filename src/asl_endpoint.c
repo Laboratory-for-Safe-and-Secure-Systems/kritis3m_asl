@@ -91,7 +91,7 @@ static int wolfssl_write_callback(WOLFSSL* wolfssl, char* buffer, int size, void
 #else
                 error = errno;
 
-                if ((error == EAGAIN) || (error == EWOULDBLOCK))
+                if ((error == EAGAIN) || (error == EWOULDBLOCK) || (error == ENOBUFS))
                         return WOLFSSL_CBIO_ERR_WANT_WRITE;
                 else if (error == ECONNRESET)
                         return WOLFSSL_CBIO_ERR_CONN_RST;
