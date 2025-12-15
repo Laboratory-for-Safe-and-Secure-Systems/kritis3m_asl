@@ -1,6 +1,6 @@
 # KRITIS³M Agile Security Library
 
-This repository contains the code for the Agile Security Library (ASL), a wrapper library to simplify integration of TLS into applications via a generic and flexble interface to improve Crypto-Agility.
+This repository contains the code for the Agile Security Library (ASL), a wrapper library to simplify integration of TLS into applications via a generic and flexible interface to improve Crypto-Agility.
 
 ## Building
 
