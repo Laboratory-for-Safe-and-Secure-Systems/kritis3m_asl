@@ -49,6 +49,9 @@ option(KRITIS3M_ASL_COMBINED_STATIC_LIB "Create a combined static library" OFF)
 # a special value for testing purposes (so all test runs have the same random output).
 option(KRITIS3M_ASL_CONSTANT_PRNG "Use a constant PRNG seed for testing purposes (!!! INSECURE !!!)" OFF)
 
+# When enabled, initialization duration of a TLS endpoint is logged to stdout
+option(KRITIS3M_ASL_LOG_INIT_DURATION "Log TLS endpoint initialization duration" OFF)
+
 # Make sure all libraries are installed in the lib directory (not lib64)
 set(CMAKE_INSTALL_LIBDIR "lib")
 

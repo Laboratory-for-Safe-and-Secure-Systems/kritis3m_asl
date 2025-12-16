@@ -38,6 +38,10 @@ if(CONFIG_KRITIS3M_ASL)
                 set(KRITIS3M_ASL_CONSTANT_PRNG ON)
         endif()
 
+        if (CONFIG_KRITIS3M_ASL_LOG_INIT_DURATION)
+                set(KRITIS3M_ASL_LOG_INIT_DURATION ON)
+        endif()
+
         zephyr_library_link_libraries(kritis3m_asl)
 
         # ToDo: these should not be accessable from the outside

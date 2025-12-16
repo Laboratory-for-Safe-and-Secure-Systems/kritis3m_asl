@@ -30,32 +30,6 @@
                 goto cleanup;                                                                      \
         }
 
-#if defined(_WIN32) && defined(_MSC_VER)
-
-#include <winsock2.h>
-
-static int take_timestamp(struct timespec* ts)
-{
-        __int64 wintime;
-
-        GetSystemTimeAsFileTime((FILETIME*) &wintime);
-
-        wintime -= 116444736000000000i64;          // 1jan1601 to 1jan1970
-        ts->tv_sec = wintime / 10000000i64;        // seconds
-        ts->tv_nsec = wintime % 10000000i64 * 100; // nano-seconds
-
-        return 0;
-}
-
-#else
-
-static int take_timestamp(struct timespec* ts)
-{
-        return clock_gettime(CLOCK_MONOTONIC, ts);
-}
-
-#endif
-
 #if defined(HAVE_SECRET_CALLBACK)
 /* Callback function for TLS v1.3 secrets for use with Wireshark */
 static int wolfssl_secret_callback(WOLFSSL* ssl, int id, const uint8_t* secret, int secretSz, void* ctx)

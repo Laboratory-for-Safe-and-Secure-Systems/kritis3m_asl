@@ -9,6 +9,7 @@
 #endif
 
 #include "asl.h"
+#include "asl_config.h"
 #include "asl_logging.h"
 #include "asl_pkcs11.h"
 #include "asl_psk.h"
@@ -449,6 +450,8 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         if (config == NULL)
                 return NULL;
 
+        TRACK_INIT_DURATION_START();
+
         /* Create a new endpoint object */
         asl_endpoint* new_endpoint = malloc(sizeof(asl_endpoint));
         if (new_endpoint == NULL)
@@ -504,6 +507,8 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
 
         TRACK_WOLFSS_HEAP_USAGE_END();
 
+        TRACK_INIT_DURATION_END();
+
         return new_endpoint;
 
 cleanup:
@@ -525,6 +530,8 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 
         if (config == NULL)
                 return NULL;
+
+        TRACK_INIT_DURATION_START();
 
         /* Create a new endpoint object */
         asl_endpoint* new_endpoint = malloc(sizeof(asl_endpoint));
@@ -640,6 +647,8 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
                 ERROR_OUT(ASL_INTERNAL_ERROR, "Failed to configure key exchange curve");
 
         TRACK_WOLFSS_HEAP_USAGE_END();
+
+        TRACK_INIT_DURATION_END();
 
         return new_endpoint;
 

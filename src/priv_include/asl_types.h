@@ -139,4 +139,29 @@ struct asl_session
 
 #endif
 
+#if defined(KRITIS3M_ASL_LOG_INIT_DURATION)
+
+#define TRACK_INIT_DURATION_START()                                                                \
+        struct timespec init_start_time;                                                           \
+        take_timestamp(&init_start_time);
+
+#define TRACK_INIT_DURATION_END()                                                                  \
+        struct timespec init_end_time;                                                             \
+        take_timestamp(&init_end_time);                                                            \
+        double init_duration_us = (init_end_time.tv_sec - init_start_time.tv_sec) * 1000000.0 +    \
+                                  (init_end_time.tv_nsec - init_start_time.tv_nsec) / 1000.0;      \
+        asl_log(ASL_LOG_LEVEL_INF,                                                                 \
+                "TLS endpoint initialization duration: %.2f us",                                   \
+                (double) init_duration_us);
+
+#else
+
+#define TRACK_INIT_DURATION_START()
+#define TRACK_INIT_DURATION_END()
+
+#endif
+
+/* Internal helper method to take a timestamp for timing measurements*/
+int take_timestamp(struct timespec* ts);
+
 #endif /* ASL_TYPES_H */

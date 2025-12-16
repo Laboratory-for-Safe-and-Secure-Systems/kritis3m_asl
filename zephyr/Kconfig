@@ -32,4 +32,10 @@ config KRITIS3M_ASL_CONSTANT_PRNG
 	help
 	  This option enables a constant Pseudo-Random Number Generator (PRNG) for testing purposes.
 
+config KRITIS3M_ASL_LOG_INIT_DURATION
+	bool "Enable logging of TLS endpoint initialization duration"
+	depends on KRITIS3M_ASL
+	help
+	  This option enables logging of the time taken to initialize TLS endpoints.
+
 endmenu

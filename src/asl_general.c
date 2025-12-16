@@ -1,6 +1,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <time.h>
 
 #if defined(_WIN32)
 #include <winsock2.h>
@@ -33,6 +34,32 @@
 #if defined(KRITIS3M_ASL_CONSTANT_PRNG)
 
 static uint32_t seed_counter = 0;
+
+#endif
+
+#if defined(_WIN32) && defined(_MSC_VER)
+
+#include <winsock2.h>
+
+int take_timestamp(struct timespec* ts)
+{
+        __int64 wintime;
+
+        GetSystemTimeAsFileTime((FILETIME*) &wintime);
+
+        wintime -= 116444736000000000i64;          // 1jan1601 to 1jan1970
+        ts->tv_sec = wintime / 10000000i64;        // seconds
+        ts->tv_nsec = wintime % 10000000i64 * 100; // nano-seconds
+
+        return 0;
+}
+
+#else
+
+int take_timestamp(struct timespec* ts)
+{
+        return clock_gettime(CLOCK_MONOTONIC, ts);
+}
 
 #endif
 
