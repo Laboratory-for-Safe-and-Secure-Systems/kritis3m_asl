@@ -1,5 +1,4 @@
 
-#include <errno.h>
 #include <stdlib.h>
 
 #if defined(_WIN32)
@@ -480,13 +479,13 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
         /* Configure the available curves for Key Exchange. For the server, all are allowed
          * to support various clients. */
         int wolfssl_key_exchange_curves[] = {
-#if defined(HAVE_PQC) && defined(WOLFSSL_NO_ML_KEM)
+#if defined(HAVE_PQC) && !defined(WOLFSSL_NO_ML_KEM)
                 WOLFSSL_SECP521R1MLKEM1024,
                 WOLFSSL_ML_KEM_1024,
 #endif
                 WOLFSSL_ECC_SECP521R1,
 
-#if defined(HAVE_PQC) && defined(WOLFSSL_NO_ML_KEM)
+#if defined(HAVE_PQC) && !defined(WOLFSSL_NO_ML_KEM)
                 WOLFSSL_SECP384R1MLKEM1024,
                 WOLFSSL_X448MLKEM768,
                 WOLFSSL_SECP384R1MLKEM768,
@@ -496,7 +495,7 @@ asl_endpoint* asl_setup_server_endpoint(asl_endpoint_configuration const* config
                 WOLFSSL_ECC_X448,
                 WOLFSSL_ECC_SECP384R1,
 
-#if defined(HAVE_PQC) && defined(WOLFSSL_NO_ML_KEM)
+#if defined(HAVE_PQC) && !defined(WOLFSSL_NO_ML_KEM)
                 WOLFSSL_SECP256R1MLKEM768,
                 WOLFSSL_X25519MLKEM512,
                 WOLFSSL_SECP256R1MLKEM512,
@@ -570,7 +569,7 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
          * a curve from the supported_groups extension (this list contains all curves from
          * the list below). */
         int wolfssl_key_exchange_curves[] = {
-#if defined(HAVE_PQC) && defined(WOLFSSL_NO_ML_KEM)
+#if defined(HAVE_PQC) && !defined(WOLFSSL_NO_ML_KEM)
                 WOLFSSL_SECP384R1MLKEM768, // Default
 
                 WOLFSSL_SECP521R1MLKEM1024,
@@ -578,7 +577,7 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
 #endif
                 WOLFSSL_ECC_SECP521R1,
 
-#if defined(HAVE_PQC) && defined(WOLFSSL_NO_ML_KEM)
+#if defined(HAVE_PQC) && !defined(WOLFSSL_NO_ML_KEM)
                 WOLFSSL_SECP384R1MLKEM1024,
                 WOLFSSL_X448MLKEM768,
                 WOLFSSL_SECP384R1MLKEM768,
@@ -588,7 +587,7 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
                 WOLFSSL_ECC_X448,
                 WOLFSSL_ECC_SECP384R1,
 
-#if defined(HAVE_PQC) && defined(WOLFSSL_NO_ML_KEM)
+#if defined(HAVE_PQC) && !defined(WOLFSSL_NO_ML_KEM)
                 WOLFSSL_SECP256R1MLKEM768,
                 WOLFSSL_X25519MLKEM512,
                 WOLFSSL_SECP256R1MLKEM512,
@@ -616,7 +615,7 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
                 case ASL_KEX_CLASSIC_X448:
                         wolfssl_key_exchange_curves[0] = WOLFSSL_ECC_X448;
                         break;
-#if defined(HAVE_PQC) && defined(WOLFSSL_NO_ML_KEM)
+#if defined(HAVE_PQC) && !defined(WOLFSSL_NO_ML_KEM)
                 case ASL_KEX_PQC_MLKEM512:
                         wolfssl_key_exchange_curves[0] = WOLFSSL_ML_KEM_512;
                         break;
@@ -650,7 +649,7 @@ asl_endpoint* asl_setup_client_endpoint(asl_endpoint_configuration const* config
                 case ASL_KEX_HYBRID_SECP384_MLKEM768: /* Order change for default! */
 #endif
                 default:
-#if defined(HAVE_PQC) && defined(WOLFSSL_NO_ML_KEM)
+#if defined(HAVE_PQC) && !defined(WOLFSSL_NO_ML_KEM)
                         wolfssl_key_exchange_curves[0] = WOLFSSL_SECP384R1MLKEM768;
 #else
                         wolfssl_key_exchange_curves[0] = WOLFSSL_ECC_SECP256R1;
